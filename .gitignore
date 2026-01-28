@@ -1,0 +1,41 @@
+# Системные артефакты Windows
+*:Zone.Identifier
+Thumbs.db
+desktop.ini
+
+# Python
+__pycache__/
+*.pyc
+venv/
+.env
+*.egg-info/
+build/
+dist/
+
+# Аудио/видео/бинарные данные
+input/
+output/
+data/
+*.ogg
+*.m4a
+*.webm
+*.mp3
+*.wav
+*.mp4
+temp_*.wav
+
+# Модели и кэш
+models/
+.cache/
+.huggingface/
+transformers/
+
+# Базы данных
+postgres_data/
+*.db
+*.sqlite
+
+# IDE
+.vscode/
+.idea/
+*.swp
