@@ -1,0 +1,24 @@
+# WhisperX settings
+whisper:
+  model: large-v3
+  device: cuda
+  compute_type: float16
+
+# Ollama settings
+ollama:
+  model: phi3:medium-128k
+  temperature: 0.1
+  top_p: 0.9
+  repeat_penalty: 1.15
+  num_predict: 2000
+
+# Paths
+paths:
+  input_dir: data/raw
+  output_dir: data/processed
+  terms_dir: docs/terms
+
+# Speaker recognition
+speaker:
+  threshold: 0.2
+  min_samples: 4
