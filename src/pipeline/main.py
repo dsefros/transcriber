@@ -30,8 +30,8 @@ HF_TOKEN = os.getenv("HF_TOKEN")
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 # === Импорт модулей баз данных ===
-from database import init_db, get_db_session, Meeting, Speaker, Fragment
-from qdrant_utils import init_qdrant_client, create_collections_if_not_exists
+from src.storage.postgres import init_db, get_db_session, Meeting, Speaker, Fragment
+from src.storage.qdrant import init_qdrant_client, create_collections_if_not_exists
 import hashlib
 import json
 
@@ -266,52 +266,47 @@ def save_to_databases(session, qdrant_client, filename, segments, analysis_md, o
         session.close()
 
 # === Основная функция ===
-def main():
-    parser = argparse.ArgumentParser(description="Pipeline для автоматического анализа встреч")
-    parser.add_argument("audio_file", help="Путь к аудиофайлу (.webm, .mp3, .wav и др.)")
-    parser.add_argument("--device", choices=["cuda", "cpu"], default="cuda", help="Устройство для обработки")
-    args = parser.parse_args()
-    
+def main(audio_file: str, device: str = "cuda"):
     # Проверка существования файла
-    if not os.path.exists(args.audio_file):
-        print(f"❌ Файл не найден: {args.audio_file}")
+    if not os.path.exists(audio_file):
+        print(f"❌ Файл не найден: {audio_file}")
         sys.exit(1)
-    
+
     # Проверка устройства
-    if args.device == "cuda" and not torch.cuda.is_available():
+    if device == "cuda" and not torch.cuda.is_available():
         print("⚠️ CUDA недоступна, переключаюсь на CPU")
-        args.device = "cpu"
-    
-    print(f"\n🚀 Запуск pipeline для файла: {args.audio_file}")
-    print(f"⚙️ Устройство: {args.device}")
+        device = "cpu"
+
+    print(f"\n🚀 Запуск pipeline для файла: {audio_file}")
+    print(f"⚙️ Устройство: {device}")
     print(f"🧠 Модель анализа: {MODEL_NAME}\n")
-    
+
     try:
         # Инициализация баз данных
         print("🔧 Инициализация баз данных...")
         engine = init_db()
         qdrant_client = init_qdrant_client()
         create_collections_if_not_exists(qdrant_client)
-        
+
         session = get_db_session(engine)
-        
+
         # 1. Транскрибация и диаризация
-        segments = transcribe_and_diarize(args.audio_file, device=args.device)
-        
+        segments = transcribe_and_diarize(audio_file, device=device)
+
         if not segments:
             print("❌ Не удалось получить сегменты речи. Проверьте аудиофайл.")
             sys.exit(1)
-        
+
         print(f"✅ Получено {len(segments)} сегментов")
-        
+
         # 2. Анализ через Ollama
         analysis_md = analyze_with_ollama(segments)
-        
+
         # 3. Сохранение в базы данных
-        md_path = save_to_databases(session, qdrant_client, os.path.basename(args.audio_file), segments, analysis_md, args.audio_file)
-        
+        md_path = save_to_databases(session, qdrant_client, os.path.basename(audio_file), segments, analysis_md, audio_file)
+
         print(f"\n🎉 Анализ завершён! Полный отчёт:\n{md_path}")
-        
+
         # Вывод краткого содержания в консоль
         summary_start = analysis_md.find("### 📝 Краткое содержание")
         if summary_start != -1:
@@ -320,7 +315,7 @@ def main():
                 summary_end = len(analysis_md)
             print("\n📋 КРАТКОЕ СОДЕРЖАНИЕ:")
             print(analysis_md[summary_start:summary_end].strip())
-        
+
     except KeyboardInterrupt:
         print("\n🛑 Обработка прервана пользователем")
         sys.exit(1)
@@ -328,6 +323,3 @@ def main():
         print(f"❌ Критическая ошибка: {e}")
         traceback.print_exc()
         sys.exit(1)
-
-if __name__ == "__main__":
-    main()
