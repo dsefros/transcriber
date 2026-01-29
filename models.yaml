@@ -37,13 +37,13 @@
 #
 # =============================================================================
 
-default_model: phi3_medium
+default_model: phi3:medium-128k
 
 profiles:
-  phi3_medium:
+  phi3:medium-128k:
     backend: ollama
     name: phi3:medium-128k
-    description: "Основная модель для анализа встреч (128K контекст)"
+    description: "Основная модель для анализа встреч (128K контекст) в ollama"
     params:
       temperature: 0.1
       top_p: 0.9
@@ -51,9 +51,9 @@ profiles:
       num_predict: 2000
       num_ctx: 131072
 
-  mistral7b:
+  llama3:8b-instruct-q5_K_M:
     backend: ollama
-    name: mistral:7b-instruct-v0.3-q6_K
+    name: llama3:8b-instruct-q5_K_M
     description: "Быстрая модель для чернового анализа"
     params:
       temperature: 0.3
@@ -62,10 +62,21 @@ profiles:
       num_predict: 1500
       num_ctx: 32768
 
-  phi3_mini:
+  phi3:mini-128k:
     backend: ollama
     name: phi3:mini-128k
-    description: "Лёгкая модель для тестов"
+    description: "Самая лёгкая модель для тестов"
+    params:
+      temperature: 0.2
+      top_p: 0.9
+      repeat_penalty: 1.15
+      num_predict: 1000
+      num_ctx: 131072
+      
+  qwen:7b-chat-v1.5-q5_K_M:
+    backend: ollama
+    name: qwen:7b-chat-v1.5-q5_K_M
+    description: "Быстрая модель для чернового анализа"
     params:
       temperature: 0.2
       top_p: 0.9
@@ -76,7 +87,7 @@ profiles:
   mistral7b_gguf:
     backend: llama_cpp
     path: /home/dsefros/models_ai/mistral-7b-instruct-v0.2.Q4_K_M.gguf
-    description: "Mistral 7B Instruct v0.2 через llama-cpp (GPU)"
+    description: "Основная модель для анализа встреч в llama_cpp"
     params:
       temperature: 0.3
       top_p: 0.85
