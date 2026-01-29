@@ -1,0 +1,597 @@
+***
+collect_py.py
+***
+import os
+
+def collect_python_files(root_dir: str = ".", output_file: str = "collected_code.txt", exclude_dirs: set = None):
+    if exclude_dirs is None:
+        exclude_dirs = {"venv", "__pycache__"}
+
+    with open(output_file, "w", encoding="utf-8") as out_f:
+        for dirpath, dirnames, filenames in os.walk(root_dir):
+            # Пропускаем исключённые директории
+            dirnames[:] = [d for d in dirnames if d not in exclude_dirs]
+            for filename in sorted(filenames):
+                if filename.endswith(".py"):
+                    filepath = os.path.join(dirpath, filename)
+                    rel_path = os.path.relpath(filepath, root_dir)
+                    try:
+                        with open(filepath, "r", encoding="utf-8") as f:
+                            content = f.read()
+                        out_f.write(f"***\n{rel_path}\n***\n{content}\n***\n")
+                    except Exception as e:
+                        out_f.write(f"***\n{rel_path}\n***\n<Ошибка при чтении файла: {e}>\n***\n")
+
+if __name__ == "__main__":
+    collect_python_files()
+***
+***
+src/cli.py
+***
+#!/usr/bin/env python3
+"""CLI для pipeline обработки встреч."""
+import argparse
+from pathlib import Path
+from src.pipeline.main import main as run_pipeline
+
+def main():
+    parser = argparse.ArgumentParser(description="Pipeline для автоматического анализа встреч")
+    parser.add_argument("audio_file", type=Path, help="Путь к аудиофайлу")
+    parser.add_argument("--device", choices=["cuda", "cpu"], default="cuda")
+    args = parser.parse_args()
+    
+    # Валидация файла
+    if not args.audio_file.exists():
+        raise FileNotFoundError(f"Файл не найден: {args.audio_file}")
+    
+    # Запуск основного пайплайна
+    run_pipeline(str(args.audio_file), args.device)
+
+if __name__ == "__main__":
+    main()
+
+***
+***
+src/pipeline/main.py
+***
+#!/usr/bin/env python3
+"""
+Единый pipeline для автоматической обработки встреч:
+1. Транскрибация + диаризация через WhisperX
+2. Анализ через локальную LLM (Ollama)
+3. Генерация структурированного отчёта в Markdown
+4. Сохранение данных в Postgres и Qdrant
+
+Поддерживает offline-режим без интернета.
+"""
+import os
+import sys
+import json
+import argparse
+from pathlib import Path
+from dotenv import load_dotenv
+import torch
+import ollama
+from datetime import datetime
+import hashlib
+import traceback
+
+# === Загрузка конфигурации ===
+load_dotenv()
+INPUT_DIR = os.getenv("INPUT_DIR", "input")
+OUTPUT_DIR = os.getenv("OUTPUT_DIR", "output")
+MODEL_NAME = os.getenv("MODEL_NAME", "phi3:medium-128k")
+HF_TOKEN = os.getenv("HF_TOKEN")
+
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+# === Импорт модулей баз данных ===
+from src.storage.postgres import init_db, get_db_session, Meeting, Speaker, Fragment
+from src.storage.qdrant import init_qdrant_client, create_collections_if_not_exists
+import hashlib
+import json
+
+# === 1. Транскрибация и диаризация (на основе transcribe_v3.py) ===
+def transcribe_and_diarize(audio_path: str, device: str = "cuda"):
+    """Транскрибация + диаризация через WhisperX."""
+    import whisperx
+    from pydub import AudioSegment
+    
+    print(f"[DEBUG] Загрузка WhisperX (large-v3) на устройстве: {device}")
+    model = whisperx.load_model("large-v3", device, compute_type="float16" if device == "cuda" else "int8")
+    
+    # Конвертация в WAV 16kHz моно
+    print("[DEBUG] Конвертация аудио в WAV...")
+    audio = AudioSegment.from_file(audio_path)
+    audio = audio.set_channels(1).set_frame_rate(16000)
+    wav_path = "temp_audio.wav"
+    audio.export(wav_path, format="wav")
+    
+    # Транскрибация
+    print("[DEBUG] Транскрибация...")
+    audio_data = whisperx.load_audio(wav_path)
+    result = model.transcribe(audio_data, language="ru")
+    
+    # Выравнивание
+    model_a, metadata = whisperx.load_align_model(
+        language_code="ru",
+        device=device,
+        model_name="facebook/wav2vec2-base-960h"
+    )
+    
+    # Диаризация
+    print("[DEBUG] Диаризация...")
+    diarize_model = whisperx.DiarizationPipeline(use_auth_token=HF_TOKEN, device=device)
+    diarize_segments = diarize_model(audio_data)
+    result = whisperx.assign_word_speakers(diarize_segments, result)
+    
+    # Формирование сегментов
+    segments = []
+    for seg in result["segments"]:
+        segments.append({
+            "text": seg.get("text", "").strip(),
+            "start": round(seg.get("start", 0), 2),
+            "end": round(seg.get("end", 0), 2),
+            "speaker": seg.get("speaker", "SPEAKER_00")
+        })
+    
+    # Очистка временных файлов
+    if os.path.exists(wav_path):
+        os.remove(wav_path)
+    
+    print(f"[DEBUG] WhisperX завершён. Сегментов: {len(segments)}")
+    return segments
+
+# === 2. Анализ через Ollama (локальная LLM) ===
+def analyze_with_ollama(segments: list) -> str:
+    """Анализ диалога через локальную модель Ollama."""
+    print(f"[DEBUG] Анализ через Ollama ({MODEL_NAME})...")
+    
+    # Формирование диалога для промпта
+    dialogue = "\n".join([f"{seg['speaker']}: {seg['text']}" for seg in segments if seg["text"]])
+    
+    # Системный промпт, заточенный под вашу предметную область
+    system_prompt = """
+Ты — эксперт по анализу технических встреч в компании Соммерс. Соммерс специализируется на IT-решениях для эквайринга, POS-терминалов и автоматизации бизнеса. Твои клиенты — банки, ритейл и частные мерчанты.
+
+Проанализируй диалог и подготовь СТРУКТУРИРОВАННЫЙ ОТЧЁТ в формате Markdown со следующими разделами:
+
+### 📝 Краткое содержание
+- Общая тема встречи (1-2 предложения)
+
+### ⚠️ Проблемы и решения
+Для каждой темы обсуждения:
+- Название проблемы (кратко)
+- Кто озвучил проблему (спикер)
+- Суть проблемы
+- Предложенные решения (если есть)
+- Кто предложил решение (спикер)
+- Статус решения (реализовано/в работе/требует согласования)
+
+ВАЖНО:
+1. Если в диалоге есть упоминания конкретных дат — используй их.
+2. Если даты нет, но есть указание на срок ("сегодня", "на следующей неделе") — преобразуй в конкретную дату относительно текущей даты {datetime.now().strftime('%d.%m.%Y')}.
+3. Фокусируйся на технических деталях: СБП, терминалы (Ingenico/Newland), прошивки, возвраты, стейт-холдеры, логи.
+4. Не придумывай информацию, которой нет в диалоге.
+5. Если информация неполная — помечай статус как "Требует уточнения".
+
+Ответ должен быть строго в формате Markdown без дополнительных комментариев.
+"""
+
+    # Запрос к Ollama
+    try:
+        response = ollama.chat(
+            model=MODEL_NAME,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"Диалог для анализа:\n{dialogue}"}
+            ],
+            options={
+                "temperature": float(os.getenv("TEMPERATURE", 0.1)),
+                "top_p": float(os.getenv("TOP_P", 0.9)),
+                "repeat_penalty": float(os.getenv("REPEAT_PENALTY", 1.15)),
+                "num_predict": 2000
+            }
+        )
+        return response["message"]["content"]
+    except Exception as e:
+        print(f"❌ Ошибка при запросе к Ollama: {e}")
+        # Резервный анализ (упрощённый)
+        return f"⚠️ **Ошибка анализа**\n\nНе удалось проанализировать диалог из-за ошибки:\n`{str(e)}`\n\n**Сырые данные диалога:**\n{dialogue[:1000]}..."
+
+# === 3. Извлечение технических терминов ===
+def extract_technical_terms(text: str) -> list:
+    """Извлечение технических терминов из текста"""
+    technical_terms = [
+        'TSP', 'ПИоТ', 'ЕГАИС', 'маркировка', 'офлайн', 'Честный ЗНАК',
+        'СБП', 'эквайринг', 'POS', 'терминал', 'прошивка', 'возвраты',
+        'стейт-холдеры', 'логи', 'API', 'интеграция', 'безопасность',
+        'Sommers', 'Соммерс', 'контрагент', 'клиент', 'продукт', 'тариф',
+        'UTM', 'транзакция', 'авторизация', 'отказ', 'комиссия'
+    ]
+    
+    found_terms = []
+    text_lower = text.lower()
+    
+    for term in technical_terms:
+        if term.lower() in text_lower:
+            found_terms.append(term)
+    
+    return found_terms
+
+# === 4. Сохранение в базы данных ===
+def save_to_databases(session, qdrant_client, filename, segments, analysis_md, original_audio_path):
+    """Сохранение результатов в Postgres и Qdrant"""
+    print("💾 Сохранение данных в базы...")
+    
+    try:
+        # Вычисление хеша аудиофайла
+        with open(original_audio_path, 'rb') as f:
+            audio_content = f.read()
+            audio_hash = hashlib.sha256(audio_content).hexdigest()
+        
+        # 1. Создание записи о встрече
+        meeting = Meeting(
+            filename=filename,
+            start_time=datetime.now(),
+            duration_sec=sum(seg.get('end', 0) - seg.get('start', 0) for seg in segments),
+            audio_hash=audio_hash,
+            status='completed',
+            quality_score=0.95,
+            context_tags=json.dumps(["meeting", "transcription"])
+        )
+        session.add(meeting)
+        session.flush()
+        
+        # 2. Обработка спикеров
+        speaker_cache = {}
+        
+        for seg in segments:
+            speaker_name = seg.get('speaker', 'SPEAKER_00')
+            
+            if speaker_name not in speaker_cache:
+                # Поиск существующего спикера
+                speaker = session.query(Speaker).filter_by(external_id=speaker_name).first()
+                if not speaker:
+                    # Создание нового спикера
+                    speaker = Speaker(
+                        external_id=speaker_name,
+                        name=speaker_name,
+                        role='неизвестно'
+                    )
+                    session.add(speaker)
+                    session.flush()
+                speaker_cache[speaker_name] = speaker.id
+        
+        # 3. Создание фрагментов
+        for i, seg in enumerate(segments):
+            speaker_name = seg.get('speaker', 'SPEAKER_00')
+            speaker_id = speaker_cache[speaker_name]
+            
+            # Извлечение технических терминов
+            technical_terms = extract_technical_terms(seg.get('text', ''))
+            
+            fragment = Fragment(
+                meeting_id=meeting.id,
+                start_time=seg.get('start', 0),
+                end_time=seg.get('end', 0),
+                speaker_id=speaker_id,
+                text=seg.get('text', '').strip(),
+                raw_text=seg.get('text', ''),
+                importance_score=0.8,
+                business_value='обсуждение',
+                technical_terms=json.dumps(technical_terms),
+                semantic_cluster=i // 5  # Простая кластеризация по 5 фрагментов
+            )
+            session.add(fragment)
+            session.flush()
+        
+        # 4. Коммит изменений
+        session.commit()
+        print(f"✅ Данные успешно сохранены в Postgres! Встреча ID: {meeting.id}")
+        
+        # 5. Сохранение отчёта в файл (для обратной совместимости)
+        base_name = Path(filename).stem
+        md_path = os.path.join(OUTPUT_DIR, f"{base_name}.md")
+        with open(md_path, "w", encoding="utf-8") as f:
+            f.write(analysis_md)
+        
+        return md_path
+        
+    except Exception as e:
+        session.rollback()
+        print(f"❌ Ошибка при сохранении в базы: {e}")
+        traceback.print_exc()
+        raise
+    finally:
+        session.close()
+
+# === Основная функция ===
+def main(audio_file: str, device: str = "cuda"):
+    # Проверка существования файла
+    if not os.path.exists(audio_file):
+        print(f"❌ Файл не найден: {audio_file}")
+        sys.exit(1)
+
+    # Проверка устройства
+    if device == "cuda" and not torch.cuda.is_available():
+        print("⚠️ CUDA недоступна, переключаюсь на CPU")
+        device = "cpu"
+
+    print(f"\n🚀 Запуск pipeline для файла: {audio_file}")
+    print(f"⚙️ Устройство: {device}")
+    print(f"🧠 Модель анализа: {MODEL_NAME}\n")
+
+    try:
+        # Инициализация баз данных
+        print("🔧 Инициализация баз данных...")
+        engine = init_db()
+        qdrant_client = init_qdrant_client()
+        create_collections_if_not_exists(qdrant_client)
+
+        session = get_db_session(engine)
+
+        # 1. Транскрибация и диаризация
+        segments = transcribe_and_diarize(audio_file, device=device)
+
+        if not segments:
+            print("❌ Не удалось получить сегменты речи. Проверьте аудиофайл.")
+            sys.exit(1)
+
+        print(f"✅ Получено {len(segments)} сегментов")
+
+        # 2. Анализ через Ollama
+        analysis_md = analyze_with_ollama(segments)
+
+        # 3. Сохранение в базы данных
+        md_path = save_to_databases(session, qdrant_client, os.path.basename(audio_file), segments, analysis_md, audio_file)
+
+        print(f"\n🎉 Анализ завершён! Полный отчёт:\n{md_path}")
+
+        # Вывод краткого содержания в консоль
+        summary_start = analysis_md.find("### 📝 Краткое содержание")
+        if summary_start != -1:
+            summary_end = analysis_md.find("###", summary_start + 1)
+            if summary_end == -1:
+                summary_end = len(analysis_md)
+            print("\n📋 КРАТКОЕ СОДЕРЖАНИЕ:")
+            print(analysis_md[summary_start:summary_end].strip())
+
+    except KeyboardInterrupt:
+        print("\n🛑 Обработка прервана пользователем")
+        sys.exit(1)
+    except Exception as e:
+        print(f"❌ Критическая ошибка: {e}")
+        traceback.print_exc()
+        sys.exit(1)
+***
+***
+src/utils/term_loader.py
+***
+from qdrant_client import QdrantClient
+from qdrant_client.http import models
+from sentence_transformers import SentenceTransformer
+import uuid
+
+client = QdrantClient(host='localhost', port=6333)
+encoder = SentenceTransformer('all-MiniLM-L6-v2')
+
+term_data = {
+    'term_id': 'tms',
+    'term_name': 'TMS',
+    'full_name': 'Terminal Management System',
+    'definition': 'Программное обеспечение для централизованного управления парком POS-терминалов. Обеспечивает удаленную конфигурацию, мониторинг состояния, обновление прошивок и сбор диагностической информации с терминалов.',
+    'related_terms': ['База данных', 'POS-терминал', 'Конфигурация', 'Мониторинг', 'Лицензирование', 'Somers.POS'],
+    'business_context': ['управление сетью терминалов', 'Развертывание новых функций на терминалах', 'Диагностика проблем с терминалами', 'Обеспечение соответствия требованиям НСПК'],
+    'regulatory_info': 'Используется для обеспечения соответствия требованиям регуляторов по безопасности обработки платежных данных и удаленному управлению терминалами.',
+    'common_misconceptions': [],
+    'examples': [
+        'Терминал сходил на TMS и получил конфигурацию.',
+        'Терминал использует TMS, что-бы обновлять свои параметры.',
+        'На TMS можно отслеживать работу терминалов.',
+        'Инженер Сомерс заходит в TMS для выставления настроек СБП на новые терминалы'
+    ],
+    'importance_level': 9,
+    'last_updated': '2026-01-14'
+}
+
+embedding = encoder.encode(term_data['definition']).tolist()
+# Используем UUID вместо строки
+point_id = str(uuid.uuid4())
+
+client.upsert(
+    collection_name='technical_terms',
+    points=[models.PointStruct(id=point_id, vector=embedding, payload=term_data)]
+)
+print(f'✅ TMS добавлен в Qdrant! ID: {point_id}')
+
+***
+***
+src/storage/postgres.py
+***
+import os
+from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, Boolean, Text, JSON, ForeignKey, func
+from sqlalchemy import text
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker, relationship
+from sqlalchemy.dialects.postgresql import UUID
+from datetime import datetime, timezone
+import uuid
+from dotenv import load_dotenv
+
+load_dotenv()
+
+Base = declarative_base()
+
+class Meeting(Base):
+    __tablename__ = 'meetings'
+    
+    id = Column(Integer, primary_key=True)
+    filename = Column(String, unique=True, nullable=False)
+    start_time = Column(DateTime(timezone=True), nullable=False, default=func.now())
+    duration_sec = Column(Integer, nullable=False)
+    audio_hash = Column(String(64), unique=True, nullable=False)
+    processed_at = Column(DateTime(timezone=True), default=func.now())
+    status = Column(String(20), default='raw')
+    quality_score = Column(Float)
+    context_tags = Column(JSON, default=[])
+    created_at = Column(DateTime(timezone=True), default=func.now())
+    updated_at = Column(DateTime(timezone=True), default=func.now(), onupdate=func.now())
+
+class Speaker(Base):
+    __tablename__ = 'speakers'
+    
+    id = Column(Integer, primary_key=True)
+    external_id = Column(String(50), unique=True)
+    name = Column(String(100))
+    role = Column(String(50))
+    voice_embedding = Column(JSON)
+    confidence_score = Column(Float)
+    last_confirmed = Column(DateTime(timezone=True))
+    is_verified = Column(Boolean, default=False)
+    voice_samples_count = Column(Integer, default=0)
+    created_at = Column(DateTime(timezone=True), default=func.now())
+    updated_at = Column(DateTime(timezone=True), default=func.now(), onupdate=func.now())
+
+class Fragment(Base):
+    __tablename__ = 'fragments'
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    meeting_id = Column(Integer, ForeignKey('meetings.id', ondelete='CASCADE'), nullable=False)
+    start_time = Column(Float, nullable=False)
+    end_time = Column(Float, nullable=False)
+    speaker_id = Column(Integer, ForeignKey('speakers.id'), nullable=False)
+    text = Column(Text, nullable=False)
+    raw_text = Column(Text, nullable=False)
+    semantic_cluster = Column(Integer)
+    importance_score = Column(Float, default=0.5)
+    business_value = Column(String(50))
+    technical_terms = Column(JSON, default=[])
+    qdrant_id = Column(String(36))
+    is_edited = Column(Boolean, default=False)
+    created_at = Column(DateTime(timezone=True), default=func.now())
+    updated_at = Column(DateTime(timezone=True), default=func.now(), onupdate=func.now())
+    
+    meeting = relationship("Meeting")
+    speaker = relationship("Speaker")
+
+def init_db():
+    """Инициализация базы данных"""
+    try:
+        database_url = os.getenv('DATABASE_URL')
+        if not database_url:
+            raise ValueError("DATABASE_URL не установлен в переменных окружения")
+        
+        engine = create_engine(
+            database_url,
+            pool_size=5,
+            max_overflow=10,
+            pool_timeout=30,
+            pool_recycle=1800,
+            connect_args={
+                "keepalives": 1,
+                "keepalives_idle": 30,
+                "keepalives_interval": 10,
+                "keepalives_count": 5,
+            }
+        )
+        
+        # Создание всех таблиц
+        Base.metadata.create_all(engine)
+        
+        # Проверка подключения
+        with engine.connect() as connection:
+            version = connection.execute(text("SELECT version()")).scalar()
+            print(f"✅ Postgres подключен успешно! Версия: {version}")
+        
+        return engine
+    except Exception as e:
+        print(f"❌ Ошибка инициализации базы данных: {e}")
+        raise
+
+def get_db_session(engine=None):
+    """Получение сессии базы данных"""
+    if engine is None:
+        engine = init_db()
+    
+    Session = sessionmaker(bind=engine)
+    return Session()
+
+***
+***
+src/storage/qdrant.py
+***
+import os
+from dotenv import load_dotenv
+from qdrant_client import QdrantClient
+from qdrant_client.http.models import Distance, VectorParams
+
+load_dotenv()
+
+def init_qdrant_client():
+    """Инициализация Qdrant клиента"""
+    try:
+        host = os.getenv('QDRANT_HOST', 'localhost')
+        port = int(os.getenv('QDRANT_PORT', '6333'))
+        api_key = os.getenv('QDRANT_API_KEY', None)
+        
+        # Отключение HTTPS для локального подключения
+        client = QdrantClient(
+            host=host,
+            port=port,
+            api_key=api_key,
+            https=False,
+            prefer_grpc=False
+        )
+        
+        # Проверка подключения
+        collections = client.get_collections()
+        collection_names = [col.name for col in collections.collections]
+        print(f"✅ Qdrant подключен успешно! Существующие коллекции: {collection_names}")
+        
+        return client
+    except Exception as e:
+        print(f"❌ Ошибка подключения к Qdrant: {e}")
+        raise
+
+def create_collections_if_not_exists(client):
+    """Создание необходимых коллекций если они не существуют"""
+    try:
+        # Коллекция для семантических фрагментов
+        if not any(col.name == "semantic_fragments" for col in client.get_collections().collections):
+            client.create_collection(
+                collection_name="semantic_fragments",
+                vectors_config=VectorParams(
+                    size=384,  # Размер эмбеддингов all-MiniLM-L6-v2
+                    distance=Distance.COSINE
+                )
+            )
+            print("✅ Коллекция 'semantic_fragments' создана в Qdrant")
+        
+        # Коллекция для технических терминов
+        if not any(col.name == "technical_terms" for col in client.get_collections().collections):
+            client.create_collection(
+                collection_name="technical_terms",
+                vectors_config=VectorParams(
+                    size=384,
+                    distance=Distance.COSINE
+                )
+            )
+            print("✅ Коллекция 'technical_terms' создана в Qdrant")
+        
+        # Коллекция для бизнес-концепций
+        if not any(col.name == "business_concepts" for col in client.get_collections().collections):
+            client.create_collection(
+                collection_name="business_concepts",
+                vectors_config=VectorParams(
+                    size=384,
+                    distance=Distance.COSINE
+                )
+            )
+            print("✅ Коллекция 'business_concepts' создана в Qdrant")
+            
+    except Exception as e:
+        print(f"❌ Ошибка создания коллекций в Qdrant: {e}")
+        raise
+
+***

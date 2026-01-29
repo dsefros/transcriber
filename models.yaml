@@ -1,0 +1,88 @@
+# =============================================================================
+# Конфигурация профилей моделей для анализа технических встреч
+# =============================================================================
+#
+# Структура:
+#   default_model: <ключ_профиля>          # Профиль по умолчанию (если не задан в .env)
+#   profiles:
+#     <ключ_профиля>:
+#       backend: ollama | llama_cpp          # Бэкенд генерации
+#       name: <имя_в_ollama>                 # Только для backend: ollama
+#       path: <путь_к_.gguf>                 # Только для backend: llama_cpp
+#       description: "Описание"              # Для списка профилей
+#       params:                              # Параметры генерации
+#         temperature: 0.1
+#         top_p: 0.9
+#         repeat_penalty: 1.15
+#         # Для Ollama:
+#         num_predict: 2000
+#         num_ctx: 131072
+#         # Для llama_cpp:
+#         max_tokens: 2048
+#         n_ctx: 4096
+#         n_gpu_layers: 25
+#         n_batch: 256
+#         verbose: false
+#
+# Советы по настройке под ваше железо (RTX 4070, 8 ГБ VRAM):
+#   - n_ctx: 2048–4096 (максимум при одновременной транскрибации)
+#   - n_gpu_layers: 20–25 (баланс скорости и стабильности)
+#   - При ошибках "Failed to create llama_context" уменьшайте оба параметра
+#
+# Добавление новой модели:
+#   1. Скачайте .gguf в /home/dsefros/models_ai/ (или другую директорию)
+#   2. Добавьте блок в секцию `profiles:` ниже
+#   3. Установите в .env: ACTIVE_MODEL_PROFILE=<ваш_ключ>
+#   4. Перезапустите пайплайн
+#
+# =============================================================================
+
+default_model: phi3_medium
+
+profiles:
+  phi3_medium:
+    backend: ollama
+    name: phi3:medium-128k
+    description: "Основная модель для анализа встреч (128K контекст)"
+    params:
+      temperature: 0.1
+      top_p: 0.9
+      repeat_penalty: 1.15
+      num_predict: 2000
+      num_ctx: 131072
+
+  mistral7b:
+    backend: ollama
+    name: mistral:7b-instruct-v0.3-q6_K
+    description: "Быстрая модель для чернового анализа"
+    params:
+      temperature: 0.3
+      top_p: 0.85
+      repeat_penalty: 1.2
+      num_predict: 1500
+      num_ctx: 32768
+
+  phi3_mini:
+    backend: ollama
+    name: phi3:mini-128k
+    description: "Лёгкая модель для тестов"
+    params:
+      temperature: 0.2
+      top_p: 0.9
+      repeat_penalty: 1.15
+      num_predict: 1000
+      num_ctx: 131072
+      
+  mistral7b_gguf:
+    backend: llama_cpp
+    path: /home/dsefros/models_ai/mistral-7b-instruct-v0.2.Q4_K_M.gguf
+    description: "Mistral 7B Instruct v0.2 через llama-cpp (GPU)"
+    params:
+      temperature: 0.3
+      top_p: 0.85
+      repeat_penalty: 1.2
+      max_tokens: 1500
+      n_ctx: 8192
+      n_gpu_layers: 40  # RTX 4070 — максимум слоёв в VRAM
+      n_batch: 512
+      verbose: false
