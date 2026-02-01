@@ -1,5 +1,6 @@
 from typing import Dict, Any
-from src.llm.backends.base import LLMBackend
+from src.infrastructure.llm.backends.base import LLMBackend
+
 
 
 class OllamaBackend(LLMBackend):

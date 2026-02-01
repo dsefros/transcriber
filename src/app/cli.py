@@ -1,7 +1,7 @@
 import argparse
 from pathlib import Path
 
-from src.worker.worker import Worker
+from src.worker import Worker
 from src.core.jobs.models import Job
 
 

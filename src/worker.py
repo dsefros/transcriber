@@ -3,7 +3,8 @@ from src.core.jobs.repository import InMemoryJobRepository
 from src.core.jobs.models import Job
 from src.core.pipeline.services import Services
 
-from src.llm.adapter import LLMAdapter
+from src.infrastructure.llm.adapter import LLMAdapter
+
 
 
 

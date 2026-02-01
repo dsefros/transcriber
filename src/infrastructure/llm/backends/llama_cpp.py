@@ -2,7 +2,8 @@ from typing import Dict, Any
 
 from llama_cpp import Llama
 
-from src.llm.backends.base import LLMBackend
+from src.infrastructure.llm.backends.base import LLMBackend
+
 
 
 class LlamaCppBackend(LLMBackend):

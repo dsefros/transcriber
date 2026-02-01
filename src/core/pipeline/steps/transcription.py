@@ -2,7 +2,8 @@ from pathlib import Path
 import json
 
 from src.core.pipeline.steps.base import Step, StepResult
-from src.legacy.pipeline.main import transcribe_and_diarize
+from src.legacy.v1.pipeline.main import transcribe_and_diarize
+
 
 
 class TranscriptionStep(Step):

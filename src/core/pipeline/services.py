@@ -1,7 +1,8 @@
 # src/pipeline_v2/services.py
 
 from dataclasses import dataclass
-from src.llm.adapter import LLMAdapter
+from src.infrastructure.llm.adapter import LLMAdapter
+
 
 
 @dataclass

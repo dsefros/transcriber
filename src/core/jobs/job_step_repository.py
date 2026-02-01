@@ -5,7 +5,8 @@ import json
 from sqlalchemy import text
 
 from src.core.jobs.models import JobStep, StepStatus
-from src.storage.postgres import init_db
+from src.infrastructure.storage.postgres import init_db
+
 
 
 class JobStepRepository:

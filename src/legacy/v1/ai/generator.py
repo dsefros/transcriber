@@ -5,7 +5,8 @@ import ollama
 import torch
 import gc
 from pathlib import Path
-from src.legacy.config.models import ModelProfile
+from src.legacy.v1.config.models import ModelProfile
+
 
 # Кэш для ленивой загрузки
 _OLLAMA_CLIENT = ollama.Client()

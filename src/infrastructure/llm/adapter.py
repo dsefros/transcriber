@@ -1,8 +1,13 @@
 from typing import Dict, Any, Optional
 
-from src.llm.config import load_models_config, get_active_model_profile
-from src.llm.backends.ollama import OllamaBackend
-from src.llm.backends.llama_cpp import LlamaCppBackend
+from src.infrastructure.llm.config import (
+    load_models_config,
+    get_active_model_profile,
+)
+
+from src.infrastructure.llm.backends.ollama import OllamaBackend
+from src.infrastructure.llm.backends.llama_cpp import LlamaCppBackend
+
 
 
 class LLMAdapter:

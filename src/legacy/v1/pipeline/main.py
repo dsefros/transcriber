@@ -36,19 +36,21 @@ Path(OUTPUT_DIR).mkdir(parents=True, exist_ok=True)
 # STORAGE / AI IMPORTS
 # =========================================================
 
-from src.legacy.storage.postgres import (
+from src.legacy.v1.storage.postgres import (
     init_db,
     get_db_session,
     Meeting,
     Speaker,
     Fragment,
 )
-from src.legacy.storage.qdrant import (
+from src.legacy.v1.storage.qdrant import (
     init_qdrant_client,
     create_collections_if_not_exists,
 )
-from src.legacy.config.models import get_models_config
-from src.legacy.ai.generator import generate_text
+
+from src.legacy.v1.config.models import get_models_config
+
+from src.legacy.v1.ai.generator import generate_text
 
 # =========================================================
 # UTILS
