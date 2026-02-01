@@ -39,3 +39,5 @@ postgres_data/
 .vscode/
 .idea/
 *.swp
+mistral-7b-instruct-v0.3.Q5_K_M.gguf
+starling-lm-7b-v1-Q5_K_M.gguf

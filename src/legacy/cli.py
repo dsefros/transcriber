@@ -2,7 +2,7 @@
 """CLI для pipeline обработки встреч."""
 import argparse
 from pathlib import Path
-from src.pipeline.main import main as run_pipeline
+from src.legacy.pipeline.main import main as run_pipeline
 
 def main():
     parser = argparse.ArgumentParser(description="Pipeline для автоматического анализа встреч")
