@@ -46,4 +46,4 @@ collect_py.py
 collected_code.txt
 
 # === generated / local docs ===
-docs/terms/
+docs/terms/*
