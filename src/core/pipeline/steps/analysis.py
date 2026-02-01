@@ -16,7 +16,7 @@ class AnalysisStep(Step):
         self.prompt_registry = PromptRegistry()
 
     def run(self, ctx) -> StepResult:
-        # 1. Получаем transcription artifacts
+        # 1. Get transcription artifacts
         transcription = ctx.artifacts.get("transcription")
         if not transcription:
             return StepResult(
@@ -38,7 +38,7 @@ class AnalysisStep(Step):
                 error=f"Segments file not found: {segments_path}",
             )
 
-        # 2. Загружаем сегменты
+        # 2. Load segments
         with open(segments_path, "r", encoding="utf-8") as f:
             segments = json.load(f)
 
@@ -64,17 +64,20 @@ class AnalysisStep(Step):
                 error=f"LLM inference failed: {e}",
             )
 
-        # 5. Build result contract
+        # 5. Read unified metadata
+        meta = ctx.services.llm.meta
+
+        # 6. Build result contract
         result = AnalysisResult(
             prompt_id="analysis.v1",
             generated_at=datetime.utcnow(),
             summary_raw=llm_response,
             segment_count=len(segments),
-            model_backend=ctx.services.llm.profile.get("backend"),
-            model_profile=ctx.services.llm.profile.get("profile_name"),
+            model_backend=meta["backend"],
+            model_profile=meta["profile"],
         )
 
-        # 6. Persist
+        # 7. Persist
         output_path = segments_path.with_name(
             segments_path.stem.replace("_segments", "_analysis") + ".json"
         )

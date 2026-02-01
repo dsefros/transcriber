@@ -7,16 +7,18 @@ from src.infrastructure.llm.config import (
 
 from src.infrastructure.llm.backends.ollama import OllamaBackend
 from src.infrastructure.llm.backends.llama_cpp import LlamaCppBackend
-
+from src.infrastructure.llm.types import LLMMetadata
 
 
 class LLMAdapter:
     """
     Infrastructure-level LLM adapter.
 
-    IMPORTANT:
-    - Does NOT load model on init
-    - Loads backend lazily on first generate()
+    Responsibilities:
+    - load model config
+    - select backend
+    - lazy backend initialization
+    - expose unified metadata
     """
 
     def __init__(self, models_config_path: str):
@@ -28,7 +30,6 @@ class LLMAdapter:
         self._backend: Optional[Any] = None  # lazy-loaded
 
     def _init_backend(self):
-        """Initialize LLM backend lazily."""
         if self._backend is not None:
             return
 
@@ -42,8 +43,18 @@ class LLMAdapter:
             raise ValueError(f"Unsupported backend: {backend_type}")
 
     def generate(self, prompt: str) -> str:
-        # 🔑 Lazy initialization happens HERE
+        """
+        Run inference via selected backend.
+        """
         self._init_backend()
 
         params: Dict[str, Any] = self.profile.get("params", {})
         return self._backend.generate(prompt, params)
+
+    @property
+    def meta(self) -> LLMMetadata:
+        """
+        Unified backend metadata.
+        """
+        self._init_backend()
+        return self._backend.meta

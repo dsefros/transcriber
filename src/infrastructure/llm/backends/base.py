@@ -1,19 +1,26 @@
 from abc import ABC, abstractmethod
 from typing import Dict, Any
 
+from src.infrastructure.llm.types import LLMMetadata
+
 
 class LLMBackend(ABC):
     """
-    Базовый контракт для всех LLM backend'ов.
+    Base contract for any LLM backend implementation.
     """
 
     @abstractmethod
     def generate(self, prompt: str, params: Dict[str, Any]) -> str:
         """
-        Выполнить синхронный инференс.
+        Run synchronous inference.
+        """
+        raise NotImplementedError
 
-        :param prompt: итоговый prompt
-        :param params: параметры генерации (temperature, max_tokens, etc)
-        :return: сгенерированный текст
+    @property
+    @abstractmethod
+    def meta(self) -> LLMMetadata:
+        """
+        Canonical metadata for this backend instance.
+        Must be backend-agnostic and stable.
         """
         raise NotImplementedError
