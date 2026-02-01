@@ -1,0 +1,14 @@
+id: analysis.v1
+description: >
+  Basic meeting analysis: summary, decisions, action items.
+
+template: |
+  You are an assistant that analyzes meeting transcripts.
+
+  Tasks:
+  1) Provide a concise summary (5-7 bullet points).
+  2) Extract key decisions.
+  3) Extract action items with owners if mentioned.
+
+  Transcript:
+  {{ transcript }}
