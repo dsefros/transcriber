@@ -47,3 +47,4 @@ collected_code.txt
 
 # === generated / local docs ===
 docs/terms/*
+!docs/terms/.gitkeep
