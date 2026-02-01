@@ -2,6 +2,7 @@ from src.core.jobs.runner import JobRunner
 from src.core.jobs.repository import InMemoryJobRepository
 from src.core.jobs.models import Job
 from src.core.pipeline.services import Services
+from src.core.jobs.postgres_repository import PostgresJobRepository
 
 from src.infrastructure.llm.adapter import LLMAdapter
 
