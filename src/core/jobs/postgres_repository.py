@@ -2,7 +2,7 @@ from datetime import datetime
 from uuid import UUID
 
 from sqlalchemy import text
-from src.jobs.models import Job, JobStatus
+from src.core.jobs.models import Job, JobStatus
 from src.storage.postgres import init_db
 
 

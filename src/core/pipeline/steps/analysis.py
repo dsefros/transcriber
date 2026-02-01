@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 from datetime import datetime
 
-from src.pipeline_v2.steps.base import Step, StepResult
+from src.core.pipeline.steps.base import Step, StepResult
 from src.prompts.registry import PromptRegistry
 from src.contracts.analysis_result import AnalysisResult
 

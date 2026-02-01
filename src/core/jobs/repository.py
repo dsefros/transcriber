@@ -1,5 +1,5 @@
 from typing import Dict
-from src.jobs.models import Job
+from src.core.jobs.models import Job
 
 
 class InMemoryJobRepository:

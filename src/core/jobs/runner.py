@@ -2,10 +2,11 @@ from datetime import datetime
 from pathlib import Path
 import traceback
 
-from src.jobs.models import Job, JobStatus
-from src.pipeline_v2.context import PipelineContext
-from src.pipeline_v2.orchestrator import PipelineOrchestrator
-from src.pipeline_v2.services import Services
+from src.core.jobs.models import Job, JobStatus
+from src.core.pipeline.context import PipelineContext
+from src.core.pipeline.orchestrator import PipelineOrchestrator
+from src.core.pipeline.services import Services
+
 
 
 class JobRunner:

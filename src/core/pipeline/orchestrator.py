@@ -1,8 +1,8 @@
-from src.jobs.job_step_repository import JobStepRepository
-from src.jobs.models import StepStatus
+from src.core.jobs.job_step_repository import JobStepRepository
+from src.core.jobs.models import StepStatus
 
-from src.pipeline_v2.steps.transcription import TranscriptionStep
-from src.pipeline_v2.steps.analysis import AnalysisStep
+from src.core.pipeline.steps.transcription import TranscriptionStep
+from src.core.pipeline.steps.analysis import AnalysisStep
 
 
 class PipelineOrchestrator:

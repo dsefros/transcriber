@@ -4,7 +4,7 @@ import json
 
 from sqlalchemy import text
 
-from src.jobs.models import JobStep, StepStatus
+from src.core.jobs.models import JobStep, StepStatus
 from src.storage.postgres import init_db
 
 

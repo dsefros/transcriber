@@ -1,9 +1,11 @@
-from src.jobs.runner import JobRunner
-from src.jobs.postgres_repository import PostgresJobRepository
-from src.jobs.models import Job
+from src.core.jobs.runner import JobRunner
+from src.core.jobs.repository import InMemoryJobRepository
+from src.core.jobs.models import Job
+from src.core.pipeline.services import Services
 
 from src.llm.adapter import LLMAdapter
-from src.pipeline_v2.services import Services
+
+
 
 
 class Worker:

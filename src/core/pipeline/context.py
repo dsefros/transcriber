@@ -4,7 +4,8 @@ from uuid import UUID
 from typing import Dict, Any
 import hashlib
 
-from src.pipeline_v2.services import Services
+from src.core.pipeline.services import Services
+
 
 
 @dataclass

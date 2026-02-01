@@ -1,6 +1,8 @@
-from src.jobs.runner import JobRunner
-from src.jobs.repository import InMemoryJobRepository
-from src.jobs.models import Job
+from src.core.jobs.runner import JobRunner
+from src.core.jobs.repository import InMemoryJobRepository
+from src.core.jobs.models import Job
+from src.core.pipeline.services import Services
+
 
 
 class Worker:
