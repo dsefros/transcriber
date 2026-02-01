@@ -44,3 +44,6 @@ starling-lm-7b-v1-Q5_K_M.gguf
 # === dev / analysis artifacts ===
 collect_py.py
 collected_code.txt
+
+# === generated / local docs ===
+docs/terms/
