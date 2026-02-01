@@ -2,13 +2,11 @@
 
 from dataclasses import dataclass
 from src.infrastructure.llm.adapter import LLMAdapter
-
+from src.core.transcription.port import TranscriptionPort
 
 
 @dataclass
 class Services:
-    """
-    Infrastructure services container.
-    Lives on Worker level, injected into PipelineContext.
-    """
-    llm: LLMAdapter
+    def __init__(self, llm_adapter, transcription: TranscriptionPort):
+        self.llm = llm_adapter
+        self.transcription = transcription

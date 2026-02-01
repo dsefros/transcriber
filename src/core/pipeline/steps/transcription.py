@@ -1,27 +1,46 @@
-from pathlib import Path
-import json
-
 from src.core.pipeline.steps.base import Step, StepResult
-from src.legacy.v1.pipeline.main import transcribe_and_diarize
-
+from src.core.pipeline.context import PipelineContext
+import json
+from pathlib import Path
 
 
 class TranscriptionStep(Step):
     name = "transcription"
+    """
+    Шаг пайплайна: транскрипция аудио.
 
-    def run(self, ctx):
-        segments = transcribe_and_diarize(
-            audio_path=str(ctx.source_path)
+    Core:
+    - не знает, legacy это или нет
+    - не знает, WhisperX или сервис
+    - работает ТОЛЬКО через TranscriptionPort
+    """
+
+    def run(self, ctx: PipelineContext) -> StepResult:
+        if ctx.source_type != "audio":
+            return StepResult(
+                status="failed",
+                error=f"TranscriptionStep supports only audio source, got: {ctx.source_type}",
+            )
+
+        # 🔑 Вызов через порт
+        segments = ctx.services.transcription.transcribe(
+            str(ctx.source_path)
         )
 
-        out_dir = Path("output")
-        out_dir.mkdir(exist_ok=True)
+        if not segments:
+            return StepResult(
+                status="failed",
+                error="Empty transcription result",
+            )
 
-        segments_path = out_dir / f"{ctx.source_hash}_segments.json"
-        segments_path.write_text(
-            json.dumps(segments, ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
+        # 📦 Сохраняем сегменты в файл (канонично для pipeline)
+        output_dir = Path("output")
+        output_dir.mkdir(exist_ok=True)
+
+        segments_path = output_dir / f"{ctx.job_id}_segments.json"
+
+        with open(segments_path, "w", encoding="utf-8") as f:
+            json.dump(segments, f, ensure_ascii=False, indent=2)
 
         return StepResult(
             status="completed",
