@@ -10,7 +10,7 @@ class TranscriptionStep(Step):
     Шаг пайплайна: транскрипция аудио.
 
     Core:
-    - не знает, legacy это или нет
+    - не привязан к legacy naming
     - не знает, WhisperX или сервис
     - работает ТОЛЬКО через TranscriptionPort
     """
