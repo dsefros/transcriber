@@ -1,8 +1,10 @@
-"""Compatibility wrappers around the canonical active-runtime model config loader.
+"""Compatibility shim around the canonical active-runtime model config loader.
 
 Active runtime code should import from ``src.config.models`` directly.
-This module remains only as a migration-safe shim for older infrastructure imports.
+This module remains only for older infrastructure callers that still expect a
+plain-dict config shape during the migration.
 """
+
 import os
 from typing import Any, Dict
 
@@ -10,7 +12,7 @@ from src.config.models import ModelConfigError, load_models_config as load_canon
 
 
 def load_models_config(path: str) -> Dict[str, Any]:
-    """Return a dict view of the canonical config for compatibility callers."""
+    """Return a dict-shaped compatibility view of the canonical config loader."""
     config = load_canonical_models_config(config_path=path)
     return {
         "default_model": config.default_model,

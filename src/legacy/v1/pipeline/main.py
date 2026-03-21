@@ -2,6 +2,11 @@
 """
 Единый legacy-pipeline для обработки встреч.
 
+LEGACY-ONLY:
+- active runtime path no longer imports this module
+- retained for compatibility/manual v1 workflows during migration
+- canonical transcription runtime lives in ``src.infrastructure.transcription``
+
 ВАЖНО:
 - WhisperX вызывается ТОЛЬКО если НЕ передан precomputed_segments_path
 - sys.exit() ЗАПРЕЩЁН — только исключения
@@ -40,6 +45,7 @@ Path(OUTPUT_DIR).mkdir(parents=True, exist_ok=True)
 # =========================================================
 
 from src.legacy.v1.storage.postgres import (
+    # Legacy-only compatibility re-exports from canonical infrastructure storage.
     init_db,
     get_db_session,
     Meeting,
@@ -102,6 +108,7 @@ def load_segments_from_json(json_path: str):
 # =========================================================
 
 def transcribe_and_diarize(audio_path: str, device: str = "cuda"):
+    """Compatibility wrapper onto the canonical WhisperX runtime."""
     from src.infrastructure.transcription.whisperx_runtime import transcribe_and_diarize as runtime_transcribe_and_diarize
 
     return runtime_transcribe_and_diarize(audio_path=audio_path, device=device)
