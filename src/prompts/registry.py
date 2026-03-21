@@ -34,6 +34,6 @@ class PromptRegistry:
             raise ValueError("Prompt template missing")
 
         for key, value in variables.items():
-            template = template.replace(f"{{{{ {key} }}}}", value)
+            template = template.replace(f"{{{{ {key} }}}}", str(value))
 
         return template
