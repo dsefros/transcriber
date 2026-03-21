@@ -4,7 +4,7 @@ from src.core.jobs.postgres_repository import PostgresJobRepository
 
 from src.core.pipeline.services import Services
 
-from src.infrastructure.transcription.legacy_adapter import LegacyTranscriptionAdapter
+from src.infrastructure.transcription.whisperx_adapter import WhisperXTranscriptionAdapter
 from src.infrastructure.llm.adapter import LLMAdapter
 
 
@@ -13,8 +13,8 @@ class Worker:
         # --- infrastructure ---
         self.repo = PostgresJobRepository()
 
-        # Transcription backend (legacy adapter for now)
-        self.transcription = LegacyTranscriptionAdapter()
+        # Transcription backend (canonical WhisperX adapter)
+        self.transcription = WhisperXTranscriptionAdapter()
 
         # LLM initialized once per worker (lazy model load inside)
         self.llm_adapter = LLMAdapter(models_config_path="models.yaml")
