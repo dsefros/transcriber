@@ -1,5 +1,6 @@
-"""
-Загрузчик конфигурации моделей из models.yaml
+"""Legacy-only model configuration loader retained for v1 pipeline compatibility.
+
+This duplicate loader remains outside the active runtime path during migration.
 """
 import os
 import yaml
