@@ -11,10 +11,13 @@ import os
 import json
 import gc
 import sys
+import copy
 import hashlib
 import traceback
 from pathlib import Path
 from datetime import datetime
+from src.infrastructure.logging.setup import log_memory
+from src.infrastructure.logging.stages import MemoryStage
 
 import torch
 import ollama
@@ -102,6 +105,15 @@ def load_segments_from_json(json_path: str):
 def transcribe_and_diarize(audio_path: str, device: str = "cuda"):
     import whisperx
     from pydub import AudioSegment
+    import os
+
+    job_id = None
+
+    log_memory(
+        stage=MemoryStage.BEFORE_WHISPER_LOAD,
+        component="transcription",
+        job_id=job_id,
+    )
 
     print(f"[DEBUG] WhisperX load (device={device})")
 
@@ -111,6 +123,12 @@ def transcribe_and_diarize(audio_path: str, device: str = "cuda"):
         compute_type="float16" if device == "cuda" else "int8",
     )
 
+    log_memory(
+        stage=MemoryStage.AFTER_WHISPER_LOAD,
+        component="transcription",
+        job_id=job_id,
+    )
+
     audio = AudioSegment.from_file(audio_path)
     audio = audio.set_channels(1).set_frame_rate(16000)
 
@@ -118,7 +136,20 @@ def transcribe_and_diarize(audio_path: str, device: str = "cuda"):
     audio.export(wav_path, format="wav")
 
     audio_data = whisperx.load_audio(wav_path)
-    result = model.transcribe(audio_data, language="ru")
+
+    # =========================================================
+    # 1️⃣ RAW TRANSCRIBE
+    # =========================================================
+
+    raw_result = model.transcribe(audio_data, language=None)
+
+    raw_segments = copy.deepcopy(raw_result["segments"])
+    debug_dump_segments(raw_segments, "debug_raw_segments.json")
+    debug_validate_segments(raw_segments, "RAW")
+
+    # =========================================================
+    # 2️⃣ ALIGN
+    # =========================================================
 
     model_a, metadata = whisperx.load_align_model(
         language_code="ru",
@@ -126,19 +157,43 @@ def transcribe_and_diarize(audio_path: str, device: str = "cuda"):
         model_name="facebook/wav2vec2-base-960h",
     )
 
-    result = whisperx.align(
-        result["segments"], model_a, metadata, audio_data, device
+    aligned_result = whisperx.align(
+        raw_result["segments"],
+        model_a,
+        metadata,
+        audio_data,
+        device,
     )
 
+    aligned_segments = copy.deepcopy(aligned_result["segments"])
+    debug_dump_segments(aligned_segments, "debug_aligned_segments.json")
+    debug_validate_segments(aligned_segments, "ALIGNED")
+
     del model_a
-    _free_gpu_memory()
+
+    # =========================================================
+    # 3️⃣ DIARIZATION
+    # =========================================================
 
     diarize_model = whisperx.DiarizationPipeline(
         use_auth_token=HF_TOKEN,
         device=device,
     )
+
     diarized = diarize_model(audio_data)
-    result = whisperx.assign_word_speakers(diarized, result)
+
+    diarized_result = whisperx.assign_word_speakers(
+        diarized,
+        aligned_result,
+    )
+
+    diarized_segments = copy.deepcopy(diarized_result["segments"])
+    debug_dump_segments(diarized_segments, "debug_diarized_segments.json")
+    debug_validate_segments(diarized_segments, "DIARIZED")
+
+    # =========================================================
+    # FINAL SEGMENT BUILD
+    # =========================================================
 
     segments = [
         {
@@ -147,19 +202,82 @@ def transcribe_and_diarize(audio_path: str, device: str = "cuda"):
             "start": round(seg.get("start", 0), 2),
             "end": round(seg.get("end", 0), 2),
         }
-        for seg in result["segments"]
+        for seg in diarized_segments
     ]
 
-    del model, diarize_model, audio_data, diarized, result
+    # =========================================================
+    # MEMORY CLEANUP
+    # =========================================================
+
+    log_memory(
+        stage=MemoryStage.AFTER_WHISPER_INFERENCE,
+        component="transcription",
+        job_id=job_id,
+    )
+
+    del model
+    del diarize_model
+    del audio_data
+    del diarized
+    del raw_result
+    del aligned_result
+    del diarized_result
+
     _free_gpu_memory()
 
     if os.path.exists(wav_path):
         os.remove(wav_path)
 
+    log_memory(
+        stage=MemoryStage.AFTER_WHISPER_CLEANUP,
+        component="transcription",
+        job_id=job_id,
+    )
+
     print(f"[DEBUG] WhisperX done: {len(segments)} segments")
+
     return segments
 
 
+# =====
+def debug_validate_segments(segments, label: str):
+    print(f"\n=== VALIDATION: {label} ===")
+
+    inversions = 0
+    overlaps = 0
+    unsorted = 0
+    empty = 0
+
+    for i, s in enumerate(segments):
+        start = s.get("start", 0)
+        end = s.get("end", 0)
+        text = s.get("text", "")
+
+        if not text:
+            empty += 1
+
+        if end < start:
+            inversions += 1
+
+        if i > 0:
+            prev = segments[i - 1]
+            if start < prev.get("start", 0):
+                unsorted += 1
+            if start < prev.get("end", 0):
+                overlaps += 1
+
+    print("count:", len(segments))
+    print("empty_text:", empty)
+    print("inversions:", inversions)
+    print("unsorted:", unsorted)
+    print("overlaps:", overlaps)
+
+
+def debug_dump_segments(segments, filename: str):
+    with open(filename, "w", encoding="utf-8") as f:
+        json.dump(segments, f, ensure_ascii=False, indent=2)
+
+# =====
 # =========================================================
 # ANALYSIS
 # =========================================================
