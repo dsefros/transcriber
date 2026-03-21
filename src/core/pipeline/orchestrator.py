@@ -1,8 +1,8 @@
+import logging
+import time
+
 from src.core.jobs.job_step_repository import JobStepRepository
 from src.core.jobs.models import StepStatus
-
-from src.core.pipeline.steps.transcription import TranscriptionStep
-from src.core.pipeline.steps.analysis import AnalysisStep
 
 
 class PipelineOrchestrator:
@@ -13,8 +13,12 @@ class PipelineOrchestrator:
 
     def __init__(self):
         self.repo = JobStepRepository()
+        self.logger = logging.getLogger("pipeline")
 
         # порядок выполнения pipeline
+        from src.core.pipeline.steps.transcription import TranscriptionStep
+        from src.core.pipeline.steps.analysis import AnalysisStep
+
         self.steps = [
             TranscriptionStep(),
             AnalysisStep(),
@@ -26,50 +30,93 @@ class PipelineOrchestrator:
         """
 
         for step in self.steps:
-            # 1. Получаем или создаём состояние шага
-            step_state = self.repo.create_if_not_exists(
-                job_id=job.id,
-                step_name=step.name,
+            step_name = step.name
+
+            # --- фиксируем текущий шаг job ---
+            job.current_step = step_name
+            ctx.services  # just to make intent explicit
+
+            # --- лог: шаг стартовал ---
+            self.logger.info(
+                "step_started",
+                extra={
+                    "extra": {
+                        "event": "step_started",
+                        "job_id": str(job.id),
+                        "step": step_name,
+                        "component": "pipeline",
+                    }
+                },
             )
 
-            # 2. Если шаг уже завершён — просто прокидываем artifacts дальше
+            step_state = self.repo.create_if_not_exists(
+                job_id=job.id,
+                step_name=step_name,
+            )
+
+            # если шаг уже завершён — просто прокидываем artifacts
             if step_state.status == StepStatus.COMPLETED:
                 if step_state.artifacts:
-                    ctx.artifacts[step.name] = step_state.artifacts
+                    ctx.artifacts[step_name] = step_state.artifacts
                 continue
 
-            # 3. RUNNING — это инвариантная ошибка
+            # RUNNING — инвариантная ошибка
             if step_state.status == StepStatus.RUNNING:
                 raise RuntimeError(
-                    f"Step '{step.name}' already RUNNING for job {job.id}"
+                    f"Step '{step_name}' already RUNNING for job {job.id}"
                 )
 
-            # 4. Переводим в RUNNING (attempt++)
             self.repo.mark_running(step_state)
 
-            try:
-                # 5. Выполняем шаг
-                result = step.run(ctx)
+            started_at = time.monotonic()
 
-                # 6. Обрабатываем результат
+            try:
+                result = step.run(ctx)
+                duration_ms = int((time.monotonic() - started_at) * 1000)
+
                 if result.status == "completed":
                     self.repo.mark_completed(
                         step_state,
                         artifacts=result.artifacts,
                     )
 
-                    # 🔑 КЛЮЧЕВОЕ МЕСТО
-                    # передаём artifacts следующему шагу
-                    ctx.artifacts[step.name] = result.artifacts or {}
+                    ctx.artifacts[step_name] = result.artifacts or {}
+
+                    # --- лог: шаг завершён ---
+                    self.logger.info(
+                        "step_completed",
+                        extra={
+                            "extra": {
+                                "event": "step_completed",
+                                "job_id": str(job.id),
+                                "step": step_name,
+                                "component": "pipeline",
+                                "duration_ms": duration_ms,
+                            }
+                        },
+                    )
 
                 else:
                     self.repo.mark_failed(
                         step_state,
                         error=result.error or "unknown error",
                     )
-                    return  # pipeline останавливается
+
+                    self.logger.error(
+                        "step_failed",
+                        extra={
+                            "extra": {
+                                "event": "step_failed",
+                                "job_id": str(job.id),
+                                "step": step_name,
+                                "component": "pipeline",
+                                "error": result.error,
+                            }
+                        },
+                    )
+                    return
 
             except Exception as e:
-                # 7. Любое исключение = FAILED
+                duration_ms = int((time.monotonic() - started_at) * 1000)
+
                 self.repo.mark_failed(step_state, str(e))
-                raise

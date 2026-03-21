@@ -1,12 +1,27 @@
 import argparse
+import logging
 from pathlib import Path
 
+from src.infrastructure.logging.setup import setup_logging
 from src.worker import Worker
 from src.core.jobs.models import Job
 
 
-
 def main():
+    # 🔑 ИНИЦИАЛИЗАЦИЯ ЛОГИРОВАНИЯ (ОДИН РАЗ)
+    setup_logging(level="INFO")
+
+    # 🔍 ТЕСТОВЫЙ ЛОГ (нужен для проверки, уберём позже)
+    logging.getLogger("bootstrap").info(
+        "logging_initialized",
+        extra={
+            "extra": {
+                "event": "logging_initialized",
+                "component": "cli",
+            }
+        },
+    )
+
     parser = argparse.ArgumentParser("Meeting pipeline (job-based)")
     parser.add_argument("source", type=Path)
     parser.add_argument("--json", action="store_true")

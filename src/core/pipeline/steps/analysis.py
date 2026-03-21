@@ -1,4 +1,6 @@
 import json
+import logging
+import time
 from pathlib import Path
 from datetime import datetime
 
@@ -14,9 +16,13 @@ class AnalysisStep(Step):
 
     def __init__(self):
         self.prompt_registry = PromptRegistry()
+        self.logger = logging.getLogger("analysis")
 
     def run(self, ctx) -> StepResult:
-        # 1. Get transcription artifacts
+        job_id = str(ctx.job_id)
+        t0 = time.monotonic()
+
+        # --- 1. Get transcription artifacts ---
         transcription = ctx.artifacts.get("transcription")
         if not transcription:
             return StepResult(
@@ -38,7 +44,7 @@ class AnalysisStep(Step):
                 error=f"Segments file not found: {segments_path}",
             )
 
-        # 2. Load segments
+        # --- 2. Load segments ---
         with open(segments_path, "r", encoding="utf-8") as f:
             segments = json.load(f)
 
@@ -49,13 +55,13 @@ class AnalysisStep(Step):
                 error="Empty transcription text",
             )
 
-        # 3. Render prompt
+        # --- 3. Render prompt ---
         prompt = self.prompt_registry.render(
             self.PROMPT_PATH,
             transcript=transcript,
         )
 
-        # 4. LLM inference
+        # --- 4. LLM inference (КЛЮЧЕВОЕ МЕСТО) ---
         try:
             llm_response = ctx.services.llm.generate(prompt)
         except Exception as e:
@@ -64,10 +70,9 @@ class AnalysisStep(Step):
                 error=f"LLM inference failed: {e}",
             )
 
-        # 5. Read unified metadata
         meta = ctx.services.llm.meta
 
-        # 6. Build result contract
+        # --- 5. Build result ---
         result = AnalysisResult(
             prompt_id="analysis.v1",
             generated_at=datetime.utcnow(),
@@ -77,13 +82,33 @@ class AnalysisStep(Step):
             model_profile=meta["profile"],
         )
 
-        # 7. Persist
+        # --- 6. Save result ---
         output_path = segments_path.with_name(
             segments_path.stem.replace("_segments", "_analysis") + ".json"
         )
 
         with open(output_path, "w", encoding="utf-8") as f:
-            json.dump(result.__dict__, f, ensure_ascii=False, indent=2, default=str)
+            json.dump(
+                result.__dict__,
+                f,
+                ensure_ascii=False,
+                indent=2,
+                default=str,
+            )
+
+        total_ms = int((time.monotonic() - t0) * 1000)
+
+        self.logger.info(
+            "analysis_completed",
+            extra={
+                "extra": {
+                    "event": "analysis_completed",
+                    "job_id": job_id,
+                    "analysis_path": str(output_path),
+                    "total_ms": total_ms,
+                }
+            },
+        )
 
         return StepResult(
             status="completed",
