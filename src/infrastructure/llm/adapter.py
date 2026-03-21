@@ -1,10 +1,6 @@
-from typing import Dict, Any, Optional
+from typing import Any, Dict, Optional
 
-from src.infrastructure.llm.config import (
-    load_models_config,
-    get_active_model_profile,
-)
-
+from src.config.models import get_active_model_profile, load_models_config
 from src.infrastructure.llm.backends.ollama import OllamaBackend
 from src.infrastructure.llm.backends.llama_cpp import LlamaCppBackend
 from src.infrastructure.llm.types import LLMMetadata
@@ -15,7 +11,7 @@ class LLMAdapter:
     Infrastructure-level LLM adapter.
 
     Responsibilities:
-    - load model config
+    - load model config from the canonical active-runtime source
     - select backend
     - lazy backend initialization
     - expose unified metadata
@@ -33,12 +29,13 @@ class LLMAdapter:
         if self._backend is not None:
             return
 
-        backend_type = self.profile.get("backend")
+        backend_type = self.profile.backend
+        backend_config = self.profile.to_backend_config()
 
         if backend_type == "ollama":
-            self._backend = OllamaBackend(self.profile)
+            self._backend = OllamaBackend(backend_config)
         elif backend_type == "llama_cpp":
-            self._backend = LlamaCppBackend(self.profile)
+            self._backend = LlamaCppBackend(backend_config)
         else:
             raise ValueError(f"Unsupported backend: {backend_type}")
 
@@ -48,7 +45,7 @@ class LLMAdapter:
         """
         self._init_backend()
 
-        params: Dict[str, Any] = self.profile.get("params", {})
+        params: Dict[str, Any] = self.profile.params
         return self._backend.generate(prompt, params)
 
     @property
