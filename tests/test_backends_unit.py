@@ -23,11 +23,20 @@ def test_ollama_backend_generate_and_meta(monkeypatch):
 
     client = Client()
     monkeypatch.setattr("src.infrastructure.llm.backends.ollama.ollama.Client", lambda: client)
-    backend = OllamaBackend({"profile_name": "primary", "name": "llama3", "params": {"temperature": 0.5}})
+    backend = OllamaBackend(
+        {
+            "profile_name": "primary",
+            "name": "llama3",
+            "params": {"temperature": 0.5, "num_ctx": 8192},
+        }
+    )
 
     assert backend.generate("prompt") == "hi"
     assert client.calls[0]["stream"] is False
+    assert client.calls[0]["options"]["num_ctx"] == 8192
+    assert client.calls[0]["options"]["temperature"] == 0.5
     assert backend.meta["backend"] == "ollama"
+    assert backend.meta["context_size"] == 8192
 
 
 def test_llama_cpp_backend_requires_path_and_forwards_n_ctx(monkeypatch):

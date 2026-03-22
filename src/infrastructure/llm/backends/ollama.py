@@ -27,7 +27,7 @@ class OllamaBackend(LLMBackend):
             raise ValueError("Ollama backend requires 'name' in model profile")
 
         params = profile.get("params", {})
-        self.context_size = params.get("context_size")  # may be None
+        self.context_size = params.get("num_ctx")  # may be None
 
         # --- client ---
         self.client = ollama.Client()
@@ -39,6 +39,8 @@ class OllamaBackend(LLMBackend):
             "repeat_penalty": params.get("repeat_penalty", 1.1),
             "num_predict": params.get("num_predict", 2048),
         }
+        if self.context_size is not None:
+            self.default_generation_params["num_ctx"] = self.context_size
 
     def generate(self, prompt: str, params: Dict[str, Any] | None = None) -> str:
         """

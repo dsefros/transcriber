@@ -50,3 +50,31 @@ def test_invalid_profile_is_skipped_but_valid_profiles_remain(models_config_fact
     assert set(config.profiles) == {"valid"}
     assert "Пропущен некорректный профиль 'broken'" in capsys.readouterr().out
     assert config.profiles["valid"].to_backend_config()["backend"] == "ollama"
+
+
+def test_ollama_profile_reads_num_ctx_from_config(models_config_factory):
+    config_path = models_config_factory(
+        profiles={
+            "primary": {
+                "backend": "ollama",
+                "name": "llama3",
+                "params": {"num_ctx": 16384},
+            }
+        }
+    )
+
+    config = load_models_config(str(config_path))
+
+    assert config.profiles["primary"].params["num_ctx"] == 16384
+
+
+@pytest.mark.parametrize(
+    "params,match",
+    [
+        ({"context_size": 4096}, "context_size"),
+        ({"context_size": 4096, "num_ctx": 8192}, "используйте 'num_ctx'"),
+    ],
+)
+def test_ollama_profile_rejects_legacy_context_size_param(params, match):
+    with pytest.raises(ModelConfigError, match=match):
+        ModelProfile("broken", {"backend": "ollama", "name": "llama3", "params": params})

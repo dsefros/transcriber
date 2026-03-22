@@ -21,6 +21,7 @@ Canonical modules to use in new development:
 ## Operational notes
 
 - `models.yaml` is the single supported source of model runtime configuration.
+- Ollama runtime context configuration is sourced from `models.yaml` via `profiles.<name>.params.num_ctx`; `context_size` is not supported for Ollama profiles.
 - `DATABASE_URL` is required for the active worker runtime.
 - WhisperX runtime settings are sourced from environment variables in `src.infrastructure.transcription.whisperx_runtime`.
   - `TRANSCRIPTION_MODEL_NAME` defaults to `large-v3`.
