@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 from unittest.mock import patch
 
@@ -53,5 +54,5 @@ def test_env_loader_populates_database_url_without_overriding_existing_env(env_f
     loaded = load_env_file_if_present(str(env_path))
 
     assert loaded is True
-    assert 'postgresql://from-env-file' == __import__('os').environ['DATABASE_URL']
-    assert 'already-exported' == __import__('os').environ['ACTIVE_MODEL_PROFILE']
+    assert 'postgresql://from-env-file' == os.environ['DATABASE_URL']
+    assert 'already-exported' == os.environ['ACTIVE_MODEL_PROFILE']

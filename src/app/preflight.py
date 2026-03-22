@@ -18,7 +18,7 @@ class PreflightError(RuntimeError):
     """Raised when the canonical runtime cannot start safely."""
 
 
-_ML_INSTALL_HINT = "pip install -r requirements-ml.txt"
+_ML_INSTALL_HINT = "pip install -r requirements/ml.txt"
 
 
 def _module_available(module_name: str) -> bool:
@@ -30,7 +30,7 @@ def _validate_backend_dependencies(profile: ModelProfile) -> None:
         if not _module_available("ollama"):
             raise PreflightError(
                 "Ollama backend selected but Python package 'ollama' is not installed. "
-                "Install the runtime dependencies with: pip install -r requirements.txt"
+                "Install the runtime dependencies with: pip install -r requirements/runtime.txt"
             )
         return
 
@@ -38,7 +38,7 @@ def _validate_backend_dependencies(profile: ModelProfile) -> None:
         if not _module_available("llama_cpp"):
             raise PreflightError(
                 "llama_cpp backend selected but llama-cpp-python is not installed. "
-                "Install the runtime dependencies with: pip install -r requirements.txt"
+                "Install the runtime dependencies with: pip install -r requirements/runtime.txt"
             )
         if profile.path and not Path(profile.path).exists():
             raise PreflightError(

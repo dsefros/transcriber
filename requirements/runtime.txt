@@ -1,0 +1,9 @@
+# Canonical runtime dependencies for CLI -> Worker -> JobRunner -> PipelineOrchestrator.
+PyYAML>=6.0,<7.0
+SQLAlchemy>=2.0,<3.0
+python-dotenv>=1.0,<2.0
+psutil>=5.9,<6.0
+ollama>=0.1.0,<1.0
+
+# Optional local LLM backend for profiles using backend=llama_cpp.
+llama-cpp-python>=0.2.0,<1.0
