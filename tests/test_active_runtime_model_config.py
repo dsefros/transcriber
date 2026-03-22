@@ -1,13 +1,8 @@
 import os
-import sys
 import tempfile
 import textwrap
-import types
 import unittest
 from unittest.mock import patch
-
-sys.modules.setdefault("ollama", types.SimpleNamespace(Client=lambda: object()))
-sys.modules.setdefault("llama_cpp", types.SimpleNamespace(Llama=object))
 
 from src.config.models import get_active_model_profile, load_models_config
 from src.infrastructure.llm.adapter import LLMAdapter
@@ -67,3 +62,15 @@ class ActiveRuntimeModelConfigTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ImportLightweightTests(unittest.TestCase):
+    def test_llm_adapter_module_imports_without_backend_packages(self):
+        from src.infrastructure.llm.adapter import LLMAdapter
+
+        self.assertIsNotNone(LLMAdapter)
+
+    def test_whisperx_adapter_module_imports_without_ml_runtime(self):
+        from src.infrastructure.transcription.whisperx_adapter import WhisperXTranscriptionAdapter
+
+        self.assertIsNotNone(WhisperXTranscriptionAdapter)

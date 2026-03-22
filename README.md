@@ -5,14 +5,18 @@
 ## Быстрый старт
 
 ```bash
-# 1. Установка зависимостей
+# 1. Базовые зависимости для config/CLI/test collection
 pip install -r requirements.txt
 
-# 2. Настройка переменных окружения
+# 2. ML-зависимости для реального audio runtime (WhisperX / torch / pyannote stack)
+# если они не входят в ваш основной requirements-файл:
+pip install -r requirements-ml.txt
+
+# 3. Настройка переменных окружения
 cp .env.example .env
 nano .env  # заполните HF_TOKEN, DATABASE_URL и др.
 
-# 3. Канонический запуск runtime
+# 4. Канонический запуск runtime
 PYTHONPATH=. python -m src.app.cli data/raw/ваш_файл.webm
 ```
 
@@ -32,7 +36,9 @@ PYTHONPATH=. python -m src.app.cli data/raw/ваш_файл.webm
 
 Точный active flow сейчас такой:
 
-- `src.app.cli` → `src.worker` → `JobRunner` → `PipelineOrchestrator` → `TranscriptionStep` → `AnalysisStep`
+- `src.app.cli` → preflight checks → `src.worker` → `JobRunner` → `PipelineOrchestrator` → `TranscriptionStep` → `AnalysisStep`
+
+CLI теперь выполняет лёгкий preflight до создания `Worker`: проверяет существование входного пути, загрузку канонического `models.yaml`, разрешение active profile, наличие обязательной зависимости для выбранного LLM backend, наличие ML-стека для аудио runtime и обязательный `DATABASE_URL`. Ошибки намеренно ранние и actionable, чтобы оператор не ждал подключения к БД или загрузки моделей перед очевидным отказом.
 
 Persistence в active runtime описывается точнее так:
 
@@ -48,9 +54,11 @@ Persistence в active runtime описывается точнее так:
 
 Совместимые shim-модули остаются намеренно:
 
-- `src/infrastructure/llm/config.py` — compatibility shim с dict-shaped config
-- `src/infrastructure/transcription/legacy_adapter.py` — alias shim для migration path
-- `src/legacy/v1/*` — legacy import paths и compatibility-only сценарии
+- `src/infrastructure/llm/config.py` — compatibility shim с dict-shaped config поверх `src.config.models`
+- `src/infrastructure/transcription/legacy_adapter.py` — минимальный compatibility facade для старого adapter import path
+- `src/legacy/v1/*` — legacy import paths и compatibility-only/manual сценарии
+
+Эта legacy surface остаётся только как quarantine boundary. Active runtime не должен расширять её или тянуть её обратно в canonical flow.
 
 ## Config Truth
 
@@ -92,3 +100,10 @@ PYTHONPATH=. python -m src.app.cli <audio>
 - Ollama (локальная LLM)
 - Postgres (локально для active runtime)
 - Qdrant может встречаться в legacy/planned/non-canonical контекстах, но не является обязательным для текущего active runtime path.
+
+
+## Environment Expectations
+
+- Лёгкие тесты и import/collection-проверки должны проходить без полного ML-стека. Для этого heavy imports в canonical runtime отложены до реального выполнения backend/runtime кода.
+- Реальный audio runtime по-прежнему требует `torch`, `whisperx`, `pydub` и сопутствующий ML stack. Если этих пакетов нет, CLI завершится на preflight с подсказкой по установке.
+- Active runtime по-прежнему требует `DATABASE_URL`, потому что `src.worker` сохраняет job state в Postgres до запуска pipeline.

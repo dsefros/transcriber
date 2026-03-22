@@ -1,14 +1,48 @@
 import copy
 import gc
+import importlib
 import json
 import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-import torch
-
 from src.infrastructure.logging.setup import log_memory
 from src.infrastructure.logging.stages import MemoryStage
+
+
+class TranscriptionDependencyError(RuntimeError):
+    """Raised when the WhisperX runtime is executed without required packages."""
+
+
+def _load_torch_module():
+    try:
+        return importlib.import_module("torch")
+    except ModuleNotFoundError as exc:
+        raise TranscriptionDependencyError(
+            "WhisperX backend selected but torch is not installed. "
+            "Install with: pip install -r requirements-ml.txt"
+        ) from exc
+
+
+def _load_whisperx_module():
+    try:
+        return importlib.import_module("whisperx")
+    except ModuleNotFoundError as exc:
+        raise TranscriptionDependencyError(
+            "WhisperX backend selected but whisperx is not installed. "
+            "Install with: pip install -r requirements-ml.txt"
+        ) from exc
+
+
+def _load_audio_segment_class():
+    try:
+        module = importlib.import_module("pydub")
+    except ModuleNotFoundError as exc:
+        raise TranscriptionDependencyError(
+            "WhisperX backend selected but pydub is not installed. "
+            "Install with: pip install -r requirements-ml.txt"
+        ) from exc
+    return module.AudioSegment
 
 
 def _load_env_file_if_present(env_path: str = ".env") -> None:
@@ -37,9 +71,8 @@ class WhisperXTranscriptionRuntime:
         self._hf_token = HF_TOKEN if hf_token is None else hf_token
 
     def transcribe(self, audio_path: str, device: str = "cuda") -> List[Dict[str, Any]]:
-        import whisperx
-        from pydub import AudioSegment
-
+        whisperx = _load_whisperx_module()
+        AudioSegment = _load_audio_segment_class()
         job_id = None
         wav_path = "temp_audio.wav"
 
@@ -151,6 +184,12 @@ def transcribe_and_diarize(audio_path: str, device: str = "cuda") -> List[Dict[s
 
 
 def free_gpu_memory() -> None:
+    try:
+        torch = _load_torch_module()
+    except TranscriptionDependencyError:
+        gc.collect()
+        return
+
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
         torch.cuda.synchronize()
