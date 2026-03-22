@@ -16,6 +16,13 @@ def _prompt_id_from_path(prompt_path: str) -> str:
     return prompt_path.replace("/", ".")
 
 
+def _resolve_prompt_path(ctx) -> str:
+    models_config = getattr(ctx.services.llm, "models_config", None)
+    if models_config and hasattr(models_config, "get_default_analysis_prompt"):
+        return models_config.get_default_analysis_prompt()
+    return "analysis/v1.yaml"
+
+
 class AnalysisStep(Step):
     name = "analysis"
 
@@ -61,7 +68,7 @@ class AnalysisStep(Step):
                 error="Empty transcription text",
             )
 
-        prompt_path = ctx.services.llm.models_config.get_default_analysis_prompt()
+        prompt_path = _resolve_prompt_path(ctx)
         prompt_id = _prompt_id_from_path(prompt_path)
         prompt = self.prompt_registry.render(
             prompt_path,
