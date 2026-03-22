@@ -33,6 +33,16 @@ class ModelProfile:
                 f"Профиль '{key}': для backend='llama_cpp' требуется поле 'path'"
             )
 
+        if self.backend == "ollama":
+            self._validate_ollama_params()
+
+    def _validate_ollama_params(self) -> None:
+        if "context_size" in self.params:
+            raise ModelConfigError(
+                f"Профиль '{self.key}': параметр 'context_size' для backend='ollama' "
+                "не поддерживается; используйте 'num_ctx'"
+            )
+
     def to_backend_config(self) -> Dict[str, Any]:
         """Return the normalized dict shape expected by active backends."""
         config: Dict[str, Any] = {
