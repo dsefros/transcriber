@@ -6,15 +6,16 @@
 
 ```bash
 # 1. Базовые зависимости для config/CLI/test collection
-pip install -r requirements.txt
+pip install -r requirements/runtime.txt
+pip install -r requirements/ml.txt
 
-# 2. ML-зависимости для реального audio runtime (WhisperX / torch / pyannote stack)
-# если они не входят в ваш основной requirements-файл:
-pip install -r requirements-ml.txt
-
-# 3. Настройка переменных окружения
+# 2. Настройка переменных окружения
 cp .env.example .env
 nano .env  # заполните HF_TOKEN, DATABASE_URL и др.
+
+# 3. Проверка supported environment
+# runtime_doctor автоматически читает локальный .env, если файл существует
+python -m src.app.runtime_doctor
 
 # 4. Канонический запуск runtime
 PYTHONPATH=. python -m src.app.cli data/raw/ваш_файл.webm
@@ -95,10 +96,11 @@ PYTHONPATH=. python -m src.app.cli <audio>
 
 ## Требования
 
-- Python 3.10+
-- CUDA 11.8+ (для GPU)
-- Ollama (локальная LLM)
-- Postgres (локально для active runtime)
+- Supported Python baseline: 3.10 or 3.11
+- Supported GPU baseline for canonical WhisperX runtime: NVIDIA GPU + CUDA 12.1 userspace (`torch==2.3.0+cu121`)
+- Postgres обязателен для active runtime worker (`DATABASE_URL`)
+- `HF_TOKEN` рекомендуется как часть supported baseline для pyannote diarization/download flows
+- Ollama требуется только для профилей `backend=ollama`; локальный GGUF-файл требуется только для профилей `backend=llama_cpp`
 - Qdrant может встречаться в legacy/planned/non-canonical контекстах, но не является обязательным для текущего active runtime path.
 
 
@@ -135,3 +137,8 @@ python -m pytest -m smoke
 - Лёгкие тесты и import/collection-проверки должны проходить без полного ML-стека. Для этого heavy imports в canonical runtime отложены до реального выполнения backend/runtime кода.
 - Реальный audio runtime по-прежнему требует `torch`, `whisperx`, `pydub` и сопутствующий ML stack. Если этих пакетов нет, CLI завершится на preflight с подсказкой по установке.
 - Active runtime по-прежнему требует `DATABASE_URL`, потому что `src.worker` сохраняет job state в Postgres до запуска pipeline.
+
+
+## Runtime Environment Contract
+
+Подробный поддерживаемый baseline, разделение dependency roles и использование runtime doctor (включая auto-load локального `.env`) описаны в `docs/runtime-environment.md`.
