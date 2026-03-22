@@ -2,10 +2,8 @@ import pytest
 
 from src.config.models import load_models_config as load_canonical_models_config
 from src.infrastructure.llm.config import get_active_model_profile, load_models_config
-from src.infrastructure.transcription.legacy_adapter import (
-    LegacyTranscriptionAdapter,
-    WhisperXTranscriptionAdapter,
-)
+from src.infrastructure.transcription.legacy_adapter import LegacyTranscriptionAdapter
+from src.infrastructure.transcription.whisperx_adapter import WhisperXTranscriptionAdapter
 from src.legacy.v1.storage import (
     Fragment,
     Meeting,

@@ -11,3 +11,7 @@ from src.infrastructure.transcription.whisperx_adapter import WhisperXTranscript
 LegacyTranscriptionAdapter = WhisperXTranscriptionAdapter
 
 __all__ = ["LegacyTranscriptionAdapter"]
+
+# Intentionally do not re-export ``WhisperXTranscriptionAdapter`` via ``__all__``.
+# New code should import the canonical adapter from
+# ``src.infrastructure.transcription.whisperx_adapter`` directly.

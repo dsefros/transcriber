@@ -180,9 +180,18 @@ python -m pytest -m integration
 
 Deliberately **not** done in this PR:
 
-- full modernization of every historical dependency in `src.legacy`
+- full removal of the remaining compatibility-only modules in `src.legacy`
 - making CPU execution a first-class supported transcription target
 - auto-repair or hidden fallback logic for incompatible ML stacks
 - a containerized/relocked dependency solver for every platform
+
+The remaining legacy surface is intentionally narrow:
+
+- `src/legacy/v1/pipeline/main.py` for manual compatibility workflows
+- `src/legacy/v1/storage/*` for old storage import paths
+- thin config/adaptor shims that point back to canonical modules
+
+Historical snapshots and dead one-off legacy helpers are not part of the supported
+runtime contract.
 
 This PR is about making the current canonical runtime **inspectable, reproducible, and honest**.

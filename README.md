@@ -61,6 +61,20 @@ Persistence в active runtime описывается точнее так:
 
 Эта legacy surface остаётся только как quarantine boundary. Active runtime не должен расширять её или тянуть её обратно в canonical flow.
 
+Что уже убрано из поддерживаемой surface:
+
+- legacy snapshot-копии runtime helper-модулей больше не считаются поддерживаемыми import paths
+- исторические одноразовые LLM-клиенты вне canonical/compatibility boundary удалены как dead legacy code
+- compatibility facade для transcription adapter сохраняет только старый alias-символ и больше не выглядит как альтернативный canonical export
+
+Что остаётся допустимым только как compatibility layer:
+
+- `src/legacy/v1/pipeline/main.py` — ручной v1 workflow, не canonical entrypoint
+- `src/legacy/v1/storage/*` — re-export canonical storage helpers для старых import paths
+- `src/legacy/v1/config/models.py` и `src/infrastructure/llm/config.py` — thin wrappers над `src.config.models`
+
+Если вы пишете новый код, используйте только canonical imports и entrypoints из active runtime.
+
 ## Config Truth
 
 Канонический источник model-конфигурации — `models.yaml`.
