@@ -41,7 +41,9 @@ python -m src.app.cli /path/to/job.json --json
 ## Runtime expectations
 
 - `DATABASE_URL` must be set for the worker runtime.
-- `models.yaml` must define the active LLM profile used by `src.config.models`.
+- `models.yaml` is the canonical operator-facing source of LLM backend and generation configuration.
+- `ACTIVE_MODEL_PROFILE` only selects which `models.yaml` profile is active at runtime.
+- Legacy LLM env vars such as `TEMPERATURE`, `NUM_CTX`, `NUM_PREDICT`, `TOP_P`, and `REPEAT_PENALTY` are unsupported and ignored by the canonical runtime.
 - Ollama profiles in `models.yaml` must use `params.num_ctx` for the runtime context window; `context_size` is not a supported Ollama config key.
 - WhisperX runtime dependencies must be installed for audio transcription runs.
 - Transcription runtime knobs stay env-driven and default to the existing behavior used by `src.infrastructure.transcription.whisperx_runtime`:

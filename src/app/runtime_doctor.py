@@ -20,6 +20,13 @@ SUPPORTED_PYANNOTE = "3.4.0"
 SUPPORTED_WHISPERX = "3.3.1"
 SUPPORTED_CUDA = "12.1"
 DEFAULT_MODELS_PATH = "models.yaml"
+DEPRECATED_LLM_ENV_VARS = (
+    "TEMPERATURE",
+    "NUM_CTX",
+    "NUM_PREDICT",
+    "TOP_P",
+    "REPEAT_PENALTY",
+)
 
 RUNTIME_PACKAGES = {
     "PyYAML": True,
@@ -121,6 +128,23 @@ def _env_var_status(name: str, *, required: bool, extra_hint: str | None = None)
         return CheckResult(name, "fail", f"{name} is not set.{suffix}")
     suffix = f" {extra_hint}" if extra_hint else ""
     return CheckResult(name, "warn", f"{name} is not set.{suffix}")
+
+
+def _deprecated_llm_env_var_checks(active_profile: str | None) -> list[CheckResult]:
+    profile_label = active_profile or "the active profile"
+    checks: list[CheckResult] = []
+    for name in DEPRECATED_LLM_ENV_VARS:
+        value = os.getenv(name)
+        if not value:
+            continue
+        checks.append(
+            CheckResult(
+                name,
+                "warn",
+                f"{name} is set to '{value}' but is ignored by the canonical runtime; move this value into models.yaml under the '{profile_label}' profile params.",
+            )
+        )
+    return checks
 
 
 def _package_status(distribution_name: str, *, required: bool, expected: str | None = None) -> CheckResult:
@@ -255,6 +279,7 @@ def collect_runtime_report(*, models_path: str = DEFAULT_MODELS_PATH, check_db_c
 
     model_check, model_details = _models_status(models_path)
     active_backend = model_details.get("backend")
+    active_profile = model_details.get("active_profile")
 
     checks = [
         _python_status(),
@@ -265,6 +290,7 @@ def collect_runtime_report(*, models_path: str = DEFAULT_MODELS_PATH, check_db_c
         _env_var_status("TRANSCRIPTION_DEVICE", required=False, extra_hint="Defaults to cuda for WhisperX transcription."),
         _env_var_status("ALIGNMENT_LANGUAGE_CODE", required=False, extra_hint="Defaults to ru for WhisperX alignment loading."),
         _env_var_status("ALIGNMENT_MODEL_NAME", required=False, extra_hint="Defaults to facebook/wav2vec2-base-960h for WhisperX alignment loading."),
+        *_deprecated_llm_env_var_checks(active_profile),
         _database_status(check_connection=check_db_connection),
         _gpu_status(),
         *_collect_package_checks(active_backend),

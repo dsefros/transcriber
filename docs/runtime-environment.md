@@ -20,7 +20,9 @@ Canonical modules to use in new development:
 
 ## Operational notes
 
-- `models.yaml` is the single supported source of model runtime configuration.
+- `models.yaml` is the canonical operator-facing source of LLM backend and generation configuration.
+- `ACTIVE_MODEL_PROFILE` only selects the active `models.yaml` profile.
+- Legacy LLM env vars such as `TEMPERATURE`, `NUM_CTX`, `NUM_PREDICT`, `TOP_P`, and `REPEAT_PENALTY` are unsupported and ignored by the canonical runtime; move those values into `models.yaml` profile params instead.
 - Ollama runtime context configuration is sourced from `models.yaml` via `profiles.<name>.params.num_ctx`; `context_size` is not supported for Ollama profiles.
 - `DATABASE_URL` is required for the active worker runtime.
 - WhisperX runtime settings are sourced from environment variables in `src.infrastructure.transcription.whisperx_runtime`.

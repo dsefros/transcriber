@@ -1,3 +1,4 @@
+from pathlib import Path
 import importlib.metadata
 import json
 from unittest.mock import patch
@@ -131,3 +132,66 @@ def test_runtime_doctor_reports_transcription_env_overrides(models_config_factor
     }
     assert any(check['name'] == 'TRANSCRIPTION_MODEL_NAME' and check['status'] == 'ok' for check in report['checks'])
     assert any(check['name'] == 'TRANSCRIPTION_DEVICE' and check['status'] == 'ok' for check in report['checks'])
+
+
+def test_runtime_doctor_does_not_warn_for_deprecated_llm_env_vars_when_absent(models_config_factory, runtime_env, monkeypatch):
+    config_path = models_config_factory()
+    runtime_env()
+    monkeypatch.chdir(config_path.parent)
+    for name in ('TEMPERATURE', 'NUM_CTX', 'NUM_PREDICT', 'TOP_P', 'REPEAT_PENALTY'):
+        monkeypatch.delenv(name, raising=False)
+
+    with patch('src.app.runtime_doctor._database_status', return_value=CheckResult('database', 'ok', 'configured')), \
+         patch('src.app.runtime_doctor._gpu_status', return_value=CheckResult('gpu', 'ok', 'cuda ok')):
+        report = collect_runtime_report(models_path=str(config_path))
+
+    assert all(check['name'] not in {'TEMPERATURE', 'NUM_CTX', 'NUM_PREDICT', 'TOP_P', 'REPEAT_PENALTY'} for check in report['checks'])
+
+
+def test_runtime_doctor_warns_for_deprecated_llm_env_vars_when_present(models_config_factory, runtime_env, monkeypatch):
+    config_path = models_config_factory()
+    runtime_env(TEMPERATURE='0.1', NUM_CTX='16384')
+    monkeypatch.chdir(config_path.parent)
+
+    with patch('src.app.runtime_doctor._database_status', return_value=CheckResult('database', 'ok', 'configured')), \
+         patch('src.app.runtime_doctor._gpu_status', return_value=CheckResult('gpu', 'ok', 'cuda ok')):
+        report = collect_runtime_report(models_path=str(config_path))
+
+    warnings = {check['name']: check for check in report['checks'] if check['name'] in {'TEMPERATURE', 'NUM_CTX'}}
+    assert warnings['TEMPERATURE']['status'] == 'warn'
+    assert 'ignored by the canonical runtime' in warnings['TEMPERATURE']['detail']
+    assert "'primary' profile params" in warnings['TEMPERATURE']['detail']
+    assert warnings['NUM_CTX']['status'] == 'warn'
+
+
+def test_runtime_doctor_deprecated_llm_env_warnings_do_not_change_active_profile(models_config_factory, runtime_env, monkeypatch):
+    config_path = models_config_factory()
+    runtime_env(ACTIVE_MODEL_PROFILE='primary', TOP_P='0.9')
+    monkeypatch.chdir(config_path.parent)
+
+    with patch('src.app.runtime_doctor._database_status', return_value=CheckResult('database', 'ok', 'configured')), \
+         patch('src.app.runtime_doctor._gpu_status', return_value=CheckResult('gpu', 'ok', 'cuda ok')):
+        report = collect_runtime_report(models_path=str(config_path))
+
+    assert report['models']['active_profile'] == 'primary'
+    top_p_warning = next(check for check in report['checks'] if check['name'] == 'TOP_P')
+    assert top_p_warning['status'] == 'warn'
+
+
+def test_operator_docs_and_env_example_reflect_models_yaml_policy():
+    env_example = Path('.env.example').read_text()
+    readme = Path('README.md').read_text()
+    runtime_doc = Path('docs/runtime-environment.md').read_text()
+
+    for legacy_name in ('TEMPERATURE', 'NUM_CTX', 'NUM_PREDICT', 'TOP_P', 'REPEAT_PENALTY'):
+        assert f'\n{legacy_name}=' not in env_example
+
+    assert 'models.yaml' in env_example
+    assert '.env выбирает активный профиль' in env_example
+    assert 'Генерационные параметры LLM' in env_example
+    assert 'canonical operator-facing source of LLM backend and generation configuration' in readme
+    assert 'ACTIVE_MODEL_PROFILE' in readme
+    assert 'unsupported and ignored by the canonical runtime' in readme
+    assert 'canonical operator-facing source of LLM backend and generation configuration' in runtime_doc
+    assert '`ACTIVE_MODEL_PROFILE` only selects the active `models.yaml` profile' in runtime_doc
+    assert 'unsupported and ignored by the canonical runtime' in runtime_doc
