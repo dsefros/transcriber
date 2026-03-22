@@ -102,6 +102,34 @@ PYTHONPATH=. python -m src.app.cli <audio>
 - Qdrant может встречаться в legacy/planned/non-canonical контекстах, но не является обязательным для текущего active runtime path.
 
 
+## Testing
+
+Тесты теперь разделены на явные слои и по умолчанию запускаются в hermetic-режиме: `pytest` очищает большую часть process environment для каждого теста, поэтому локальные `.env`, `ACTIVE_MODEL_PROFILE`, `DATABASE_URL` и другие пользовательские export-переменные не должны влиять на результат без явного fixture/monkeypatch в самом тесте.
+
+Слои тестов:
+
+- `unit` — быстрые hermetic-тесты логики, конфигурации и import/preflight-контрактов
+- `integration` — более широкие runtime/boundary-тесты без обращения к реальным внешним сервисам
+- `smoke` — узкие сквозные проверки канонических pipeline boundary
+
+Рекомендуемые команды:
+
+```bash
+# весь suite
+python -m pytest
+
+# быстрый локальный прогон по умолчанию
+python -m pytest -m unit
+
+# runtime/boundary слой отдельно
+python -m pytest -m integration
+
+# smoke-проверки канонического pipeline контракта
+python -m pytest -m smoke
+```
+
+Тестам, которым нужен runtime env, следует задавать его явно через test fixtures/`monkeypatch`, а не через реальный `.env`. Если тесту нужен собственный `models.yaml` или временная рабочая директория, он должен создавать их локально через fixture в `tests/conftest.py`.
+
 ## Environment Expectations
 
 - Лёгкие тесты и import/collection-проверки должны проходить без полного ML-стека. Для этого heavy imports в canonical runtime отложены до реального выполнения backend/runtime кода.
