@@ -22,13 +22,16 @@ data/
 *.mp3
 *.wav
 *.mp4
-temp_*.wav
+
 
 # Модели и кэш
 models/
 .cache/
 .huggingface/
 transformers/
+
+# Локальная runtime-конфигурация
+models.yaml
 
 # Базы данных
 postgres_data/
@@ -39,12 +42,12 @@ postgres_data/
 .vscode/
 .idea/
 *.swp
-# === dev / analysis artifacts ===
+
+# Dev / analysis artifacts
 collect_py.py
 collected_code.txt
+debug_*.json
 
-# === generated / local docs ===
+# Generated / local docs
 docs/terms/*
-!docs/terms/.gitkeepdebug_*.json
-
-models.yaml
+!docs/terms/.gitkeep
