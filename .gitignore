@@ -51,3 +51,4 @@ debug_*.json
 # Generated / local docs
 docs/terms/*
 !docs/terms/.gitkeeplogs/
+logs/
