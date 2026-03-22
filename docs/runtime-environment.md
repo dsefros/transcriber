@@ -22,6 +22,11 @@ Canonical modules to use in new development:
 
 - `models.yaml` is the single supported source of model runtime configuration.
 - `DATABASE_URL` is required for the active worker runtime.
+- WhisperX runtime settings are sourced from environment variables in `src.infrastructure.transcription.whisperx_runtime`.
+  - `TRANSCRIPTION_MODEL_NAME` defaults to `large-v3`.
+  - `TRANSCRIPTION_DEVICE` defaults to `cuda`.
+  - `ALIGNMENT_LANGUAGE_CODE` defaults to `ru`.
+  - `ALIGNMENT_MODEL_NAME` defaults to `facebook/wav2vec2-base-960h`.
 - WhisperX, pyannote, torch, and related ML dependencies remain a compatibility-sensitive stack at the package level, even though legacy runtime code is gone.
 - Qdrant is not part of the canonical runtime contract.
 

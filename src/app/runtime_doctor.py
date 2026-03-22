@@ -12,6 +12,7 @@ from typing import Any
 
 from src.config.env import load_env_file_if_present
 from src.config.models import ModelConfigError, get_active_model_profile, load_models_config
+from src.infrastructure.transcription.whisperx_runtime import get_transcription_settings
 
 SUPPORTED_PYTHON = ((3, 10), (3, 11))
 SUPPORTED_TORCH = "2.3.0+cu121"
@@ -248,6 +249,7 @@ def collect_runtime_report(*, models_path: str = DEFAULT_MODELS_PATH, check_db_c
             "gpu": "NVIDIA GPU with CUDA 12.1 userspace via torch 2.3.0+cu121",
             "database": "PostgreSQL via DATABASE_URL",
             "llm_backends": ["ollama", "llama_cpp"],
+            "transcription": get_transcription_settings(),
         },
     }
 
@@ -259,6 +261,10 @@ def collect_runtime_report(*, models_path: str = DEFAULT_MODELS_PATH, check_db_c
         model_check,
         _env_var_status("DATABASE_URL", required=True, extra_hint="Required before Worker startup."),
         _env_var_status("HF_TOKEN", required=False, extra_hint="Needed for pyannote diarization downloads/auth."),
+        _env_var_status("TRANSCRIPTION_MODEL_NAME", required=False, extra_hint="Defaults to large-v3 for WhisperX transcription."),
+        _env_var_status("TRANSCRIPTION_DEVICE", required=False, extra_hint="Defaults to cuda for WhisperX transcription."),
+        _env_var_status("ALIGNMENT_LANGUAGE_CODE", required=False, extra_hint="Defaults to ru for WhisperX alignment loading."),
+        _env_var_status("ALIGNMENT_MODEL_NAME", required=False, extra_hint="Defaults to facebook/wav2vec2-base-960h for WhisperX alignment loading."),
         _database_status(check_connection=check_db_connection),
         _gpu_status(),
         *_collect_package_checks(active_backend),
