@@ -1,13 +1,13 @@
 import json
 import logging
 import time
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
 
-from src.core.pipeline.steps.base import Step, StepResult
-from src.prompts.registry import PromptRegistry
 from src.contracts.analysis_result import AnalysisResult
-from src.core.transcription.contracts import load_transcription_segments
+from src.core.pipeline.steps.base import Step, StepResult
+from src.core.transcription.contracts import build_segments_artifact_path, load_transcription_segments
+from src.prompts.registry import PromptRegistry
 
 
 def _prompt_id_from_path(prompt_path: str) -> str:
@@ -23,6 +23,30 @@ def _resolve_prompt_path(ctx) -> str:
     return "analysis/v1.yaml"
 
 
+def _resolve_segments_path(ctx) -> Path:
+    if ctx.source_type == "json":
+        return Path(ctx.source_path)
+
+    transcription = ctx.artifacts.get("transcription")
+    if not transcription:
+        raise ValueError("Missing transcription artifacts")
+
+    segments_path = transcription.get("segments_path")
+    if not segments_path:
+        raise ValueError("Missing segments_path in transcription artifacts")
+
+    return Path(segments_path)
+
+
+def _build_analysis_path(ctx, segments_path: Path) -> Path:
+    if ctx.source_type == "json":
+        return build_segments_artifact_path(ctx.job_id).with_name(f"{ctx.job_id}_analysis.json")
+
+    return segments_path.with_name(
+        segments_path.stem.replace("_segments", "_analysis") + ".json"
+    )
+
+
 class AnalysisStep(Step):
     name = "analysis"
 
@@ -34,27 +58,11 @@ class AnalysisStep(Step):
         job_id = str(ctx.job_id)
         t0 = time.monotonic()
 
-        transcription = ctx.artifacts.get("transcription")
-        if not transcription:
-            return StepResult(
-                status="failed",
-                error="Missing transcription artifacts",
-            )
-
-        segments_path = transcription.get("segments_path")
-        if not segments_path:
-            return StepResult(
-                status="failed",
-                error="Missing segments_path in transcription artifacts",
-            )
-
         try:
+            segments_path = _resolve_segments_path(ctx)
             segments = load_transcription_segments(segments_path)
         except FileNotFoundError as exc:
-            return StepResult(
-                status="failed",
-                error=str(exc),
-            )
+            return StepResult(status="failed", error=str(exc))
         except ValueError as exc:
             return StepResult(
                 status="failed",
@@ -63,28 +71,21 @@ class AnalysisStep(Step):
 
         transcript = "\n".join(segment["text"] for segment in segments).strip()
         if not transcript:
-            return StepResult(
-                status="failed",
-                error="Empty transcription text",
-            )
+            return StepResult(status="failed", error="Empty transcription text")
 
         prompt_path = _resolve_prompt_path(ctx)
         prompt_id = _prompt_id_from_path(prompt_path)
-        prompt = self.prompt_registry.render(
-            prompt_path,
-            transcript=transcript,
-        )
+        prompt = self.prompt_registry.render(prompt_path, transcript=transcript)
 
         try:
             llm_response = ctx.services.llm.generate(prompt)
-        except Exception as e:
+        except Exception as exc:
             return StepResult(
                 status="failed",
-                error=f"LLM inference failed: {e}",
+                error=f"LLM inference failed: {exc}",
             )
 
         meta = ctx.services.llm.meta
-
         result = AnalysisResult(
             prompt_id=prompt_id,
             generated_at=datetime.utcnow(),
@@ -94,21 +95,18 @@ class AnalysisStep(Step):
             model_profile=meta["profile"],
         )
 
-        output_path = Path(segments_path).with_name(
-            Path(segments_path).stem.replace("_segments", "_analysis") + ".json"
-        )
-
-        with open(output_path, "w", encoding="utf-8") as f:
+        output_path = _build_analysis_path(ctx, segments_path)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        with output_path.open("w", encoding="utf-8") as file_obj:
             json.dump(
                 result.__dict__,
-                f,
+                file_obj,
                 ensure_ascii=False,
                 indent=2,
                 default=str,
             )
 
         total_ms = int((time.monotonic() - t0) * 1000)
-
         self.logger.info(
             "analysis_completed",
             extra={

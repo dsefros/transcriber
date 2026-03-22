@@ -35,8 +35,10 @@ Do not add new compatibility wrappers or reintroduce legacy import paths.
 
 ```bash
 python -m src.app.cli /path/to/audio.wav
-python -m src.app.cli /path/to/job.json --json
+python -m src.app.cli /path/to/segments.json
 ```
+
+`/path/to/segments.json` must already be a canonical transcription segments artifact (a non-empty list of `{speaker, text, start, end}` objects). In that mode the canonical pipeline skips transcription and runs analysis only.
 
 ## Runtime expectations
 

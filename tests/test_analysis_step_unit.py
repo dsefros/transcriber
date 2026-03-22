@@ -58,26 +58,38 @@ class LegacyFakeLLM:
         return self.result
 
 
-def _ctx(tmp_path, *, artifacts=None, llm=None):
+def _ctx(tmp_path, *, source_type="audio", source_path=None, artifacts=None, llm=None):
     services = SimpleNamespace(llm=llm or FakeLLM())
-    return SimpleNamespace(job_id=uuid4(), artifacts=artifacts or {}, services=services)
+    if source_path is None:
+        source_path = tmp_path / ("segments.json" if source_type == "json" else "meeting.wav")
+        if source_type == "json":
+            source_path.write_text('[]', encoding='utf-8')
+        else:
+            source_path.write_bytes(b'audio')
+    return SimpleNamespace(
+        job_id=uuid4(),
+        source_type=source_type,
+        source_path=source_path,
+        artifacts=artifacts or {},
+        services=services,
+    )
 
 
-def test_analysis_step_requires_transcription_artifacts(tmp_path):
+def test_analysis_step_requires_transcription_artifacts_for_audio(tmp_path):
     result = AnalysisStep().run(_ctx(tmp_path))
 
     assert result.status == "failed"
-    assert result.error == "Missing transcription artifacts"
+    assert result.error == "Invalid transcription artifact: Missing transcription artifacts"
 
 
-def test_analysis_step_handles_missing_segments_path(tmp_path):
+def test_analysis_step_handles_missing_segments_path_for_audio(tmp_path):
     result = AnalysisStep().run(_ctx(tmp_path, artifacts={"transcription": {"segment_count": 1}}))
 
     assert result.status == "failed"
-    assert result.error == "Missing segments_path in transcription artifacts"
+    assert result.error == "Invalid transcription artifact: Missing segments_path in transcription artifacts"
 
 
-def test_analysis_step_loads_segments_renders_prompt_and_writes_artifact(tmp_path, monkeypatch):
+def test_analysis_step_loads_segments_renders_prompt_and_writes_artifact(tmp_path):
     segments_path = tmp_path / "segments.json"
     segments_path.write_text(json.dumps([
         {"speaker": "A", "text": "Hello", "start": 0, "end": 1},
@@ -105,6 +117,28 @@ def test_analysis_step_loads_segments_renders_prompt_and_writes_artifact(tmp_pat
     assert result.artifacts["segment_count"] == 2
 
 
+def test_analysis_step_supports_json_source_without_transcription_artifact(tmp_path, monkeypatch):
+    segments_path = tmp_path / "segments.json"
+    segments_path.write_text(json.dumps([
+        {"speaker": "A", "text": "Hello", "start": 0, "end": 1},
+        {"speaker": "B", "text": "World", "start": 1, "end": 2},
+    ]), encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    llm = FakeLLM(result="json summary")
+    ctx = _ctx(tmp_path, source_type="json", source_path=segments_path, llm=llm)
+    step = AnalysisStep()
+    step.prompt_registry = FakePromptRegistry()
+
+    result = step.run(ctx)
+
+    assert result.status == "completed"
+    analysis_path = Path(result.artifacts["analysis_path"])
+    assert analysis_path.resolve() == (tmp_path / "output" / f"{ctx.job_id}_analysis.json").resolve()
+    payload = json.loads(analysis_path.read_text(encoding="utf-8"))
+    assert payload["summary_raw"] == "json summary"
+    assert result.artifacts["segment_count"] == 2
+
+
 def test_analysis_step_returns_failed_result_for_missing_segments_file(tmp_path):
     segments_path = tmp_path / "missing.json"
 
@@ -112,6 +146,16 @@ def test_analysis_step_returns_failed_result_for_missing_segments_file(tmp_path)
 
     assert result.status == "failed"
     assert "Segments file not found" in result.error
+
+
+def test_analysis_step_returns_failed_result_for_invalid_json_segments_input(tmp_path):
+    segments_path = tmp_path / "segments.json"
+    segments_path.write_text(json.dumps([{"speaker": "A", "text": "", "start": 0, "end": 1}]), encoding="utf-8")
+
+    result = AnalysisStep().run(_ctx(tmp_path, source_type="json", source_path=segments_path))
+
+    assert result.status == "failed"
+    assert result.error == "Invalid transcription artifact: Segment 0 text must be non-empty"
 
 
 def test_analysis_step_converts_llm_exception_to_failed_result(tmp_path):

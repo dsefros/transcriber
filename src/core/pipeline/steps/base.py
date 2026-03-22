@@ -4,7 +4,7 @@ from typing import Optional, Dict, Any, Literal
 
 @dataclass
 class StepResult:
-    status: Literal["completed", "failed"]
+    status: Literal["completed", "failed", "skipped"]
     artifacts: Optional[Dict[str, Any]] = None
     error: Optional[str] = None
 

@@ -1,13 +1,11 @@
 from __future__ import annotations
 
 from pathlib import Path
-from uuid import uuid4
 
 import pytest
 
 from src.core.jobs.models import Job, JobStatus
 from src.core.jobs.runner import JobRunner
-from src.core.pipeline.services import Services
 
 pytestmark = pytest.mark.unit
 

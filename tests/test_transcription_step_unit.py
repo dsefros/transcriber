@@ -25,15 +25,28 @@ class TranscriptionService:
 
 
 def _ctx(tmp_path, *, source_type="audio", segments=None):
-    source = tmp_path / "meeting.wav"
-    source.write_bytes(b"audio")
+    source = tmp_path / ("segments.json" if source_type == "json" else "meeting.wav")
+    if source_type == "json":
+        source.write_text('[]', encoding='utf-8')
+    else:
+        source.write_bytes(b"audio")
     transcription = TranscriptionService(segments=[{"speaker": " Speaker ", "text": " Hello ", "start": 2, "end": 1}] if segments is None else segments)
     services = SimpleNamespace(transcription=transcription)
     return SimpleNamespace(job_id=uuid4(), source_type=source_type, source_path=source, services=services), transcription
 
 
-def test_transcription_step_rejects_non_audio(tmp_path):
-    ctx, _ = _ctx(tmp_path, source_type="json")
+def test_transcription_step_skips_json_source(tmp_path):
+    ctx, transcription = _ctx(tmp_path, source_type="json")
+
+    result = TranscriptionStep().run(ctx)
+
+    assert result.status == "skipped"
+    assert result.artifacts is None
+    assert transcription.calls == []
+
+
+def test_transcription_step_rejects_unknown_non_audio(tmp_path):
+    ctx, _ = _ctx(tmp_path, source_type="text")
 
     result = TranscriptionStep().run(ctx)
 
@@ -69,7 +82,7 @@ def test_transcription_step_writes_normalized_artifact_and_warns(tmp_path, monke
 )
 def test_transcription_step_validation_failures_return_failed_result(tmp_path, segments, error_match):
     ctx, _ = _ctx(tmp_path, segments=segments)
-    
+
     result = TranscriptionStep().run(ctx)
 
     assert result.status == "failed"

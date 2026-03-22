@@ -21,6 +21,9 @@ class TranscriptionStep(Step):
         self.logger = logging.getLogger("transcription")
 
     def run(self, ctx: PipelineContext) -> StepResult:
+        if ctx.source_type == "json":
+            return StepResult(status="skipped")
+
         if ctx.source_type != "audio":
             return StepResult(
                 status="failed",
