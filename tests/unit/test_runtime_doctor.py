@@ -86,3 +86,48 @@ def test_runtime_doctor_gpu_status_handles_broken_torch_import(monkeypatch):
 
     assert result.status == 'fail'
     assert 'could not be imported cleanly' in result.detail
+
+
+def test_runtime_doctor_reports_transcription_env_defaults(models_config_factory, runtime_env, monkeypatch):
+    config_path = models_config_factory()
+    runtime_env()
+    monkeypatch.chdir(config_path.parent)
+    for name in ('TRANSCRIPTION_MODEL_NAME', 'TRANSCRIPTION_DEVICE', 'ALIGNMENT_LANGUAGE_CODE', 'ALIGNMENT_MODEL_NAME'):
+        monkeypatch.delenv(name, raising=False)
+
+    with patch('src.app.runtime_doctor._database_status', return_value=CheckResult('database', 'ok', 'configured')), \
+         patch('src.app.runtime_doctor._gpu_status', return_value=CheckResult('gpu', 'ok', 'cuda ok')):
+        report = collect_runtime_report(models_path=str(config_path))
+
+    assert report['supported_baseline']['transcription'] == {
+        'model_name': 'large-v3',
+        'device': 'cuda',
+        'alignment_language_code': 'ru',
+        'alignment_model_name': 'facebook/wav2vec2-base-960h',
+    }
+    assert any(check['name'] == 'TRANSCRIPTION_MODEL_NAME' and check['status'] == 'warn' for check in report['checks'])
+    assert any(check['name'] == 'TRANSCRIPTION_DEVICE' and check['status'] == 'warn' for check in report['checks'])
+
+
+def test_runtime_doctor_reports_transcription_env_overrides(models_config_factory, runtime_env, monkeypatch):
+    config_path = models_config_factory()
+    runtime_env(
+        TRANSCRIPTION_MODEL_NAME='small',
+        TRANSCRIPTION_DEVICE='cpu',
+        ALIGNMENT_LANGUAGE_CODE='en',
+        ALIGNMENT_MODEL_NAME='custom-aligner',
+    )
+    monkeypatch.chdir(config_path.parent)
+
+    with patch('src.app.runtime_doctor._database_status', return_value=CheckResult('database', 'ok', 'configured')), \
+         patch('src.app.runtime_doctor._gpu_status', return_value=CheckResult('gpu', 'warn', 'cpu only')):
+        report = collect_runtime_report(models_path=str(config_path))
+
+    assert report['supported_baseline']['transcription'] == {
+        'model_name': 'small',
+        'device': 'cpu',
+        'alignment_language_code': 'en',
+        'alignment_model_name': 'custom-aligner',
+    }
+    assert any(check['name'] == 'TRANSCRIPTION_MODEL_NAME' and check['status'] == 'ok' for check in report['checks'])
+    assert any(check['name'] == 'TRANSCRIPTION_DEVICE' and check['status'] == 'ok' for check in report['checks'])

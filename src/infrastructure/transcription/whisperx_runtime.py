@@ -15,6 +15,12 @@ class TranscriptionDependencyError(RuntimeError):
     """Raised when the WhisperX runtime is executed without required packages."""
 
 
+DEFAULT_TRANSCRIPTION_MODEL_NAME = "large-v3"
+DEFAULT_TRANSCRIPTION_DEVICE = "cuda"
+DEFAULT_ALIGNMENT_LANGUAGE_CODE = "ru"
+DEFAULT_ALIGNMENT_MODEL_NAME = "facebook/wav2vec2-base-960h"
+
+
 def _load_torch_module():
     try:
         return importlib.import_module("torch")
@@ -51,15 +57,26 @@ load_env_file_if_present()
 HF_TOKEN = os.getenv("HF_TOKEN")
 
 
+def get_transcription_settings() -> Dict[str, str]:
+    return {
+        "model_name": os.getenv("TRANSCRIPTION_MODEL_NAME", DEFAULT_TRANSCRIPTION_MODEL_NAME),
+        "device": os.getenv("TRANSCRIPTION_DEVICE", DEFAULT_TRANSCRIPTION_DEVICE),
+        "alignment_language_code": os.getenv("ALIGNMENT_LANGUAGE_CODE", DEFAULT_ALIGNMENT_LANGUAGE_CODE),
+        "alignment_model_name": os.getenv("ALIGNMENT_MODEL_NAME", DEFAULT_ALIGNMENT_MODEL_NAME),
+    }
+
+
 class WhisperXTranscriptionRuntime:
     """Canonical home for the active WhisperX transcription runtime."""
 
     def __init__(self, hf_token: Optional[str] = None):
         self._hf_token = HF_TOKEN if hf_token is None else hf_token
 
-    def transcribe(self, audio_path: str, device: str = "cuda") -> List[Dict[str, Any]]:
+    def transcribe(self, audio_path: str, device: Optional[str] = None) -> List[Dict[str, Any]]:
         whisperx = _load_whisperx_module()
         AudioSegment = _load_audio_segment_class()
+        settings = get_transcription_settings()
+        device = settings["device"] if device is None else device
         job_id = None
         wav_path = "temp_audio.wav"
 
@@ -69,10 +86,14 @@ class WhisperXTranscriptionRuntime:
             job_id=job_id,
         )
 
-        print(f"[DEBUG] WhisperX load (device={device})")
+        print(
+            "[DEBUG] WhisperX load "
+            f"(device={device}, model={settings['model_name']}, align_language={settings['alignment_language_code']}, "
+            f"align_model={settings['alignment_model_name']})"
+        )
 
         model = whisperx.load_model(
-            "large-v3",
+            settings["model_name"],
             device,
             compute_type="float16" if device == "cuda" else "int8",
         )
@@ -95,9 +116,9 @@ class WhisperXTranscriptionRuntime:
         debug_validate_segments(raw_segments, "RAW")
 
         model_a, metadata = whisperx.load_align_model(
-            language_code="ru",
+            language_code=settings["alignment_language_code"],
             device=device,
-            model_name="facebook/wav2vec2-base-960h",
+            model_name=settings["alignment_model_name"],
         )
 
         aligned_result = whisperx.align(
@@ -166,7 +187,7 @@ class WhisperXTranscriptionRuntime:
         return segments
 
 
-def transcribe_and_diarize(audio_path: str, device: str = "cuda") -> List[Dict[str, Any]]:
+def transcribe_and_diarize(audio_path: str, device: Optional[str] = None) -> List[Dict[str, Any]]:
     return WhisperXTranscriptionRuntime().transcribe(audio_path=audio_path, device=device)
 
 

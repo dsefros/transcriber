@@ -43,6 +43,11 @@ python -m src.app.cli /path/to/job.json --json
 - `DATABASE_URL` must be set for the worker runtime.
 - `models.yaml` must define the active LLM profile used by `src.config.models`.
 - WhisperX runtime dependencies must be installed for audio transcription runs.
+- Transcription runtime knobs stay env-driven and default to the existing behavior used by `src.infrastructure.transcription.whisperx_runtime`:
+  - `TRANSCRIPTION_MODEL_NAME=large-v3`
+  - `TRANSCRIPTION_DEVICE=cuda`
+  - `ALIGNMENT_LANGUAGE_CODE=ru`
+  - `ALIGNMENT_MODEL_NAME=facebook/wav2vec2-base-960h`
 
 ## Validation commands
 
