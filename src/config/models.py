@@ -75,7 +75,10 @@ class ModelsConfig:
 
     def _load(self):
         if not self.config_path.exists():
-            raise ModelConfigError(f"Файл конфигурации не найден: {self.config_path}")
+            raise ModelConfigError(
+                f"Model config file not found: {self.config_path}. "
+                "Copy models.yaml.example to models.yaml and adjust paths for your environment."
+            )
 
         with open(self.config_path, "r", encoding="utf-8") as f:
             raw_config = yaml.safe_load(f) or {}
