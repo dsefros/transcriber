@@ -94,11 +94,20 @@ def _models_status(models_path: str) -> tuple[CheckResult, dict[str, Any]]:
     except ModelConfigError as exc:
         return CheckResult("models.yaml", "fail", f"Model config is invalid: {exc}"), {}
 
+    analysis_prompt = config.get_default_analysis_prompt()
+    prompt_path = Path(__file__).resolve().parents[1] / "prompts" / analysis_prompt
+
     details = {
         "path": str(path.resolve()),
         "active_profile": profile.key,
         "backend": profile.backend,
+        "analysis_prompt": analysis_prompt,
     }
+
+    if not prompt_path.exists():
+        details["analysis_prompt_warning"] = (
+            f"analysis prompt '{analysis_prompt}' not found under src/prompts/"
+        )
 
     if profile.backend == "llama_cpp" and profile.path:
         model_path = Path(profile.path)
@@ -113,9 +122,16 @@ def _models_status(models_path: str) -> tuple[CheckResult, dict[str, Any]]:
             )
             status = "warn"
         details["model_path"] = str(model_path)
+        if "analysis_prompt_warning" in details and status == "ok":
+            status = "warn"
+        if "analysis_prompt_warning" in details:
+            detail = f"{detail} WARNING: {details['analysis_prompt_warning']}"
         return CheckResult("models.yaml", status, detail), details
 
     detail = f"Loaded active profile '{profile.key}' (backend={profile.backend})."
+    if "analysis_prompt_warning" in details:
+        detail = f"{detail} WARNING: {details['analysis_prompt_warning']}"
+        return CheckResult("models.yaml", "warn", detail), details
     return CheckResult("models.yaml", "ok", detail), details
 
 
@@ -319,6 +335,9 @@ def _render_text(report: dict[str, Any]) -> str:
     if model_info:
         lines.append(
             f"Active model profile: {model_info.get('active_profile')} (backend={model_info.get('backend')})"
+        )
+        lines.append(
+            f"Analysis prompt: {model_info.get('analysis_prompt')}"
         )
 
     lines.append("")

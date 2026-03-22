@@ -70,6 +70,7 @@ class ModelsConfig:
         self.config_path = Path(config_path)
         self.profiles: Dict[str, ModelProfile] = {}
         self.default_model: str = ""
+        self._default_analysis_prompt: str = ""
         self._load()
 
     def _load(self):
@@ -80,6 +81,7 @@ class ModelsConfig:
             raw_config = yaml.safe_load(f) or {}
 
         self.default_model = raw_config.get("default_model", "")
+        self._default_analysis_prompt = raw_config.get("default_analysis_prompt", "")
         profiles_raw = raw_config.get("profiles", {})
 
         if not profiles_raw:
@@ -113,6 +115,10 @@ class ModelsConfig:
     def list_profiles(self) -> Dict[str, str]:
         """Return {profile_key: description} for all configured profiles."""
         return {key: profile.description for key, profile in self.profiles.items()}
+
+    def get_default_analysis_prompt(self) -> str:
+        """Return the configured global analysis prompt path with legacy fallback."""
+        return self._default_analysis_prompt or "analysis/v1.yaml"
 
 
 

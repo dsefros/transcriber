@@ -61,7 +61,7 @@ def runtime_env(monkeypatch: pytest.MonkeyPatch) -> Callable[..., dict[str, str]
 def models_config_factory(tmp_path: Path) -> Callable[..., Path]:
     """Create local, minimal models.yaml fixtures for each test."""
 
-    def _create(*, default_model: str = 'primary', profiles: dict[str, dict[str, Any]] | None = None) -> Path:
+    def _create(*, default_model: str = 'primary', default_analysis_prompt: str | None = None, profiles: dict[str, dict[str, Any]] | None = None) -> Path:
         profile_map = profiles or {
             'primary': {
                 'backend': 'ollama',
@@ -76,7 +76,10 @@ def models_config_factory(tmp_path: Path) -> Callable[..., Path]:
                 'params': {'max_tokens': 512},
             },
         }
-        lines = [f'default_model: {default_model}', 'profiles:']
+        lines = [f'default_model: {default_model}']
+        if default_analysis_prompt is not None:
+            lines.append(f'default_analysis_prompt: {default_analysis_prompt}')
+        lines.append('profiles:')
         for profile_name, config in profile_map.items():
             lines.append(f'  {profile_name}:')
             for key, value in config.items():

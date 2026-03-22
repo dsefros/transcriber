@@ -41,7 +41,8 @@ python -m src.app.cli /path/to/job.json --json
 ## Runtime expectations
 
 - `DATABASE_URL` must be set for the worker runtime.
-- `models.yaml` is the canonical operator-facing source of LLM backend and generation configuration.
+- `models.yaml` is the canonical operator-facing source of LLM backend and generation configuration, including the global analysis prompt template selection.
+- `default_analysis_prompt` in `models.yaml` selects which template under `src/prompts/<relative_path>` is used by `AnalysisStep`; when omitted it falls back to `analysis/v1.yaml`.
 - `ACTIVE_MODEL_PROFILE` only selects which `models.yaml` profile is active at runtime.
 - Legacy LLM env vars such as `TEMPERATURE`, `NUM_CTX`, `NUM_PREDICT`, `TOP_P`, and `REPEAT_PENALTY` are unsupported and ignored by the canonical runtime.
 - Ollama profiles in `models.yaml` must use `params.num_ctx` for the runtime context window; `context_size` is not a supported Ollama config key.
