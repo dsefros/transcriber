@@ -111,7 +111,7 @@ def save_summary_csv(csv_path: Path, results: list[RunResult]) -> None:
 
 def main() -> int:
     if len(sys.argv) != 2:
-        print("Usage: PYTHONPATH=. python scripts/run_matrix.py <input_audio_file>")
+        print("Usage: PYTHONPATH=. python scripts/run_matrix.py <input_segments_json>")
         return 2
 
     input_file = Path(sys.argv[1]).resolve()
@@ -144,7 +144,7 @@ def main() -> int:
 
     write_log(log_file, "=" * 80)
     write_log(log_file, "MATRIX RUN STARTED")
-    write_log(log_file, f"Input file: {input_file}")
+    write_log(log_file, f"Input segments file: {input_file}")
     write_log(log_file, f"Models found: {len(model_keys)}")
     write_log(log_file, f"Prompts found: {len(PROMPTS)}")
     write_log(log_file, f"Total runs: {total_runs}")
