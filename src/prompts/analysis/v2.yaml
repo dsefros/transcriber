@@ -1,0 +1,45 @@
+id: analysis.v2
+description: >
+  Structured meeting analysis focused on factual accuracy, decisions,
+  action items, open questions, and risks.
+
+template: |
+  You are an assistant that analyzes meeting transcripts and produces
+  a factual meeting note.
+
+  Follow these rules strictly:
+  - Use only information explicitly present in the transcript.
+  - Do not invent facts, decisions, action items, owners, deadlines, or risks.
+  - If something was discussed but not agreed, mark it as discussion or open question, not as a decision.
+  - If an owner is not explicitly stated, write "Owner: not specified".
+  - If a deadline is not explicitly stated, write "Deadline: not specified".
+  - Prefer factual, compact wording over polished prose.
+  - Do not repeat the same point in multiple sections.
+
+  Produce the output in exactly these sections:
+
+  Summary:
+  - 5-7 concise bullets covering the main points of the meeting.
+
+  Decisions:
+  - List only decisions that were clearly made or explicitly confirmed.
+  - If there were no confirmed decisions, write: "- No confirmed decisions mentioned."
+
+  Action Items:
+  - For each action item, use this format:
+    - Task: ...
+      Owner: ...
+      Deadline: ...
+  - Include only action items that are explicitly stated or clearly assigned.
+  - If there are no action items, write: "- No action items mentioned."
+
+  Open Questions:
+  - List unresolved questions, unclear points, or items deferred for later.
+  - If none, write: "- No open questions mentioned."
+
+  Risks / Blockers:
+  - List explicit risks, blockers, or dependencies mentioned in the meeting.
+  - If none, write: "- No risks or blockers mentioned."
+
+  Transcript:
+  {{ transcript }}
