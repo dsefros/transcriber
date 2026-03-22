@@ -1,7 +1,7 @@
 """Canonical model configuration loader for the active runtime."""
 import os
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 import yaml
 
@@ -105,24 +105,14 @@ class ModelsConfig:
         return {key: profile.description for key, profile in self.profiles.items()}
 
 
-_models_config: Optional[ModelsConfig] = None
-
 
 def load_models_config(config_path: str = "models.yaml") -> ModelsConfig:
     """Canonical active-runtime loader for model configuration."""
     return ModelsConfig(config_path=config_path)
 
 
-def get_models_config() -> ModelsConfig:
-    """Lazy singleton retained for compatibility with existing imports."""
-    global _models_config
-    if _models_config is None:
-        _models_config = load_models_config()
-    return _models_config
-
-
 def get_active_model_profile(
-    models_config: Optional[ModelsConfig] = None,
+    models_config: ModelsConfig | None = None,
     config_path: str = "models.yaml",
 ) -> ModelProfile:
     """Return the active typed profile from the canonical active-runtime config."""
