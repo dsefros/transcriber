@@ -88,7 +88,7 @@ def _runner(monkeypatch, fake_repo, steps):
     return JobRunner(Repo(), SimpleNamespace())
 
 
-def test_failed_step_result_still_leaves_job_completed_for_transcription(monkeypatch, tmp_path):
+def test_failed_transcription_step_result_fails_job(monkeypatch, tmp_path):
     fake_repo = FakeStepRepo({
         "transcription": FakeStepState("transcription"),
         "analysis": FakeStepState("analysis"),
@@ -102,11 +102,11 @@ def test_failed_step_result_still_leaves_job_completed_for_transcription(monkeyp
     runner.run(job)
 
     assert fake_repo.failed == [("transcription", "bad audio")]
-    assert job.status is JobStatus.COMPLETED
-    assert job.error is None
+    assert job.status is JobStatus.FAILED
+    assert job.error == "bad audio"
 
 
-def test_failed_step_result_still_leaves_job_completed_for_analysis(monkeypatch, tmp_path):
+def test_failed_analysis_step_result_fails_job(monkeypatch, tmp_path):
     fake_repo = FakeStepRepo({
         "transcription": FakeStepState("transcription", artifacts={"segments_path": "existing.json"}),
         "analysis": FakeStepState("analysis"),
@@ -120,10 +120,11 @@ def test_failed_step_result_still_leaves_job_completed_for_analysis(monkeypatch,
     runner.run(job)
 
     assert fake_repo.failed == [("analysis", "llm failed")]
-    assert job.status is JobStatus.COMPLETED
+    assert job.status is JobStatus.FAILED
+    assert job.error == "llm failed"
 
 
-def test_raised_transcription_exception_is_recorded_on_step_but_job_still_completes(monkeypatch, tmp_path):
+def test_raised_transcription_exception_fails_job(monkeypatch, tmp_path):
     fake_repo = FakeStepRepo({"transcription": FakeStepState("transcription")})
     runner = _runner(monkeypatch, fake_repo, [FakeStep("transcription", error=RuntimeError("explode"))])
     job = _job(tmp_path)
@@ -131,11 +132,11 @@ def test_raised_transcription_exception_is_recorded_on_step_but_job_still_comple
     runner.run(job)
 
     assert fake_repo.failed == [("transcription", "explode")]
-    assert job.status is JobStatus.COMPLETED
-    assert job.error is None
+    assert job.status is JobStatus.FAILED
+    assert job.error == "explode"
 
 
-def test_raised_analysis_exception_is_recorded_on_step_but_job_still_completes(monkeypatch, tmp_path):
+def test_raised_analysis_exception_fails_job(monkeypatch, tmp_path):
     fake_repo = FakeStepRepo({
         "transcription": FakeStepState("transcription"),
         "analysis": FakeStepState("analysis"),
@@ -149,5 +150,5 @@ def test_raised_analysis_exception_is_recorded_on_step_but_job_still_completes(m
     runner.run(job)
 
     assert fake_repo.failed == [("analysis", "analysis blew up")]
-    assert job.status is JobStatus.COMPLETED
-    assert job.error is None
+    assert job.status is JobStatus.FAILED
+    assert job.error == "analysis blew up"
