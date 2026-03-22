@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from types import SimpleNamespace
-from uuid import uuid4
 
 import pytest
 
@@ -90,6 +89,27 @@ def test_orchestrator_runs_steps_in_order_and_rehydrates_completed(job_and_ctx):
     assert job.current_step == "analysis"
 
 
+def test_orchestrator_marks_skipped_step_completed_and_continues(job_and_ctx):
+    job, ctx = job_and_ctx
+    repo = FakeRepo({
+        "transcription": StepState("1", job.id, "transcription", StepStatus.PENDING),
+        "analysis": StepState("2", job.id, "analysis", StepStatus.PENDING),
+    })
+    transcription = FakeStep("transcription", StepResult(status="skipped"))
+    analysis = FakeStep("analysis", StepResult(status="completed", artifacts={"analysis_path": "out.json"}))
+    orchestrator = PipelineOrchestrator.__new__(PipelineOrchestrator)
+    orchestrator.repo = repo
+    orchestrator.logger = SimpleNamespace(info=lambda *a, **k: None, error=lambda *a, **k: None)
+    orchestrator.steps = [transcription, analysis]
+
+    orchestrator.run(job, ctx)
+
+    assert repo.running == ["transcription", "analysis"]
+    assert repo.completed == [("transcription", None), ("analysis", {"analysis_path": "out.json"})]
+    assert repo.failed == []
+    assert analysis.calls == [ctx]
+
+
 def test_orchestrator_raises_for_running_step(job_and_ctx):
     job, ctx = job_and_ctx
     repo = FakeRepo({"transcription": StepState("1", job.id, "transcription", StepStatus.RUNNING)})
@@ -102,23 +122,24 @@ def test_orchestrator_raises_for_running_step(job_and_ctx):
         orchestrator.run(job, ctx)
 
 
-def test_orchestrator_marks_failed_and_returns_early_for_failed_result(job_and_ctx):
+def test_orchestrator_marks_failed_and_raises_for_failed_result(job_and_ctx):
     job, ctx = job_and_ctx
     repo = FakeRepo({
         "transcription": StepState("1", job.id, "transcription", StepStatus.PENDING),
         "analysis": StepState("2", job.id, "analysis", StepStatus.PENDING),
     })
-    transcription = FakeStep("transcription", StepResult(status="failed", error="bad audio"))
+    transcription = FakeStep("transcription", StepResult(status="failed", error="bad json"))
     analysis = FakeStep("analysis", StepResult(status="completed", artifacts={"ignored": True}))
     orchestrator = PipelineOrchestrator.__new__(PipelineOrchestrator)
     orchestrator.repo = repo
     orchestrator.logger = SimpleNamespace(info=lambda *a, **k: None, error=lambda *a, **k: None)
     orchestrator.steps = [transcription, analysis]
 
-    orchestrator.run(job, ctx)
+    with pytest.raises(RuntimeError, match="bad json"):
+        orchestrator.run(job, ctx)
 
     assert repo.running == ["transcription"]
-    assert repo.failed == [("transcription", "bad audio")]
+    assert repo.failed == [("transcription", "bad json")]
     assert analysis.calls == []
     assert job.current_step == "transcription"
 
@@ -131,6 +152,7 @@ def test_orchestrator_marks_failed_and_stops_on_exception(job_and_ctx):
     orchestrator.logger = SimpleNamespace(info=lambda *a, **k: None, error=lambda *a, **k: None)
     orchestrator.steps = [FakeStep("transcription", error=ValueError("boom"))]
 
-    orchestrator.run(job, ctx)
+    with pytest.raises(ValueError, match="boom"):
+        orchestrator.run(job, ctx)
 
     assert repo.failed == [("transcription", "boom")]

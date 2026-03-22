@@ -8,7 +8,6 @@ from src.core.pipeline.orchestrator import PipelineOrchestrator
 from src.core.pipeline.services import Services
 
 
-
 class JobRunner:
     def __init__(self, repo, services: Services):
         self.repo = repo
@@ -28,7 +27,7 @@ class JobRunner:
                 job_id=job.id,
                 source_type=job.source_type,
                 source_path=Path(job.source_path),
-                services=self.services,      # 🔑 inject services
+                services=self.services,
             )
 
             # --- PIPELINE ---

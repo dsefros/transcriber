@@ -8,10 +8,28 @@ from src.core.jobs.models import Job
 from src.infrastructure.logging.setup import setup_logging
 
 
+AUDIO_SOURCE_TYPE = "audio"
+JSON_SOURCE_TYPE = "json"
+
+
+def _detect_source_type(source: Path) -> str:
+    return JSON_SOURCE_TYPE if source.suffix.lower() == ".json" else AUDIO_SOURCE_TYPE
+
+
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser("Meeting pipeline (job-based)")
-    parser.add_argument("source", type=Path)
-    parser.add_argument("--json", action="store_true")
+    parser = argparse.ArgumentParser(
+        "Meeting pipeline (job-based)",
+        description=(
+            "Run the canonical pipeline from an audio file or a transcription "
+            "segments JSON artifact. Audio runs transcription + analysis; JSON "
+            "runs analysis only."
+        ),
+    )
+    parser.add_argument(
+        "source",
+        type=Path,
+        help="Path to an audio file or transcription segments JSON artifact",
+    )
     return parser
 
 
@@ -19,11 +37,7 @@ def main():
     parser = build_parser()
     args = parser.parse_args()
 
-    # Load .env before preflight so canonical CLI behavior matches worker/runtime expectations
-    # while preserving already-exported shell variables.
     load_env_file_if_present()
-
-    # Logging stays available even when preflight fails early.
     setup_logging(level="INFO")
 
     logging.getLogger("bootstrap").info(
@@ -36,7 +50,7 @@ def main():
         },
     )
 
-    source_type = "json" if args.json else "audio"
+    source_type = _detect_source_type(args.source)
 
     try:
         preflight_summary = run_preflight(args.source, source_type=source_type)

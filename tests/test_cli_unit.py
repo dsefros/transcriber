@@ -12,13 +12,20 @@ from src.core.jobs.models import Job
 pytestmark = pytest.mark.unit
 
 
-def test_parser_accepts_required_source_and_json_flag():
+def test_detect_source_type_uses_json_extension_only():
+    assert cli._detect_source_type(Path("segments.json")) == "json"
+    assert cli._detect_source_type(Path("segments.JSON")) == "json"
+    assert cli._detect_source_type(Path("meeting.wav")) == "audio"
+    assert cli._detect_source_type(Path("archive.jsonl")) == "audio"
+
+
+def test_parser_accepts_required_source_without_json_flag():
     parser = cli.build_parser()
 
-    args = parser.parse_args(["meeting.wav", "--json"])
+    args = parser.parse_args(["meeting.wav"])
 
     assert args.source == Path("meeting.wav")
-    assert args.json is True
+    assert not hasattr(args, "json")
 
 
 def test_main_loads_env_before_preflight_and_submits_audio_job(monkeypatch, capsys):
@@ -28,7 +35,7 @@ def test_main_loads_env_before_preflight_and_submits_audio_job(monkeypatch, caps
     fake_result.status = "completed"
     fake_worker.submit.return_value = fake_result
 
-    monkeypatch.setattr(cli, "build_parser", lambda: _parser_for(Path("meeting.wav"), json_flag=False))
+    monkeypatch.setattr(cli, "build_parser", lambda: _parser_for(Path("meeting.wav")))
     monkeypatch.setattr(cli, "load_env_file_if_present", lambda: calls.append("env"))
     monkeypatch.setattr(cli, "setup_logging", lambda level: calls.append(f"logging:{level}"))
 
@@ -50,11 +57,11 @@ def test_main_loads_env_before_preflight_and_submits_audio_job(monkeypatch, caps
     assert "status: completed" in capsys.readouterr().out
 
 
-def test_main_uses_json_source_type_and_closes_worker_on_failure(monkeypatch):
+def test_main_uses_json_extension_source_type_and_closes_worker_on_failure(monkeypatch):
     fake_worker = Mock()
     fake_worker.submit.side_effect = RuntimeError("boom")
 
-    monkeypatch.setattr(cli, "build_parser", lambda: _parser_for(Path("input.json"), json_flag=True))
+    monkeypatch.setattr(cli, "build_parser", lambda: _parser_for(Path("input.json")))
     monkeypatch.setattr(cli, "load_env_file_if_present", lambda: None)
     monkeypatch.setattr(cli, "setup_logging", lambda level: None)
     monkeypatch.setattr(cli, "run_preflight", lambda source, *, source_type: {"source_type": source_type})
@@ -71,7 +78,7 @@ def test_main_uses_json_source_type_and_closes_worker_on_failure(monkeypatch):
 def test_main_does_not_create_worker_if_preflight_fails(monkeypatch):
     worker_factory = Mock(side_effect=AssertionError("worker should not be constructed"))
 
-    monkeypatch.setattr(cli, "build_parser", lambda: _parser_for(Path("missing.wav"), json_flag=False))
+    monkeypatch.setattr(cli, "build_parser", lambda: _parser_for(Path("missing.wav")))
     monkeypatch.setattr(cli, "load_env_file_if_present", lambda: None)
     monkeypatch.setattr(cli, "setup_logging", lambda level: None)
     monkeypatch.setattr(cli, "run_preflight", Mock(side_effect=PreflightError("nope")))
@@ -85,10 +92,10 @@ def test_main_does_not_create_worker_if_preflight_fails(monkeypatch):
 
 
 
-def _parser_for(source: Path, *, json_flag: bool):
+def _parser_for(source: Path):
     class Parser:
         def parse_args(self):
-            return type("Args", (), {"source": source, "json": json_flag})
+            return type("Args", (), {"source": source})
 
         def exit(self, *, status: int, message: str):
             raise SystemExit(status)
