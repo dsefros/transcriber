@@ -6,6 +6,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from src.app.preflight import PreflightError, run_preflight
+from src.config.env import load_env_file_if_present
 
 
 class CliPreflightTests(unittest.TestCase):
@@ -56,3 +57,20 @@ class CliPreflightTests(unittest.TestCase):
                 with patch.dict(os.environ, {"DATABASE_URL": "postgresql://example"}, clear=True):
                     with self.assertRaisesRegex(PreflightError, "WhisperX transcription runtime requires missing dependencies"):
                         run_preflight(source, source_type="audio", models_config_path=config_path)
+
+    def test_env_loader_populates_database_url_without_overriding_existing_env(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            env_path = Path(tmp_dir) / ".env"
+            env_path.write_text(
+                "DATABASE_URL=postgresql://from-env-file\nACTIVE_MODEL_PROFILE=file-profile\n",
+                encoding="utf-8",
+            )
+            with patch.dict(
+                os.environ,
+                {"ACTIVE_MODEL_PROFILE": "already-exported"},
+                clear=True,
+            ):
+                loaded = load_env_file_if_present(str(env_path))
+                self.assertTrue(loaded)
+                self.assertEqual("postgresql://from-env-file", os.environ["DATABASE_URL"])
+                self.assertEqual("already-exported", os.environ["ACTIVE_MODEL_PROFILE"])

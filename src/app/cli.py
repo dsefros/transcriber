@@ -3,6 +3,7 @@ import logging
 from pathlib import Path
 
 from src.app.preflight import PreflightError, run_preflight
+from src.config.env import load_env_file_if_present
 from src.core.jobs.models import Job
 from src.infrastructure.logging.setup import setup_logging
 
@@ -17,6 +18,10 @@ def build_parser() -> argparse.ArgumentParser:
 def main():
     parser = build_parser()
     args = parser.parse_args()
+
+    # Load .env before preflight so canonical CLI behavior matches worker/runtime expectations
+    # while preserving already-exported shell variables.
+    load_env_file_if_present()
 
     # Logging stays available even when preflight fails early.
     setup_logging(level="INFO")
@@ -51,7 +56,10 @@ def main():
     )
 
     worker = Worker()
-    result = worker.submit(job)
+    try:
+        result = worker.submit(job)
+    finally:
+        worker.close()
 
     print("\n=== JOB RESULT ===")
     print(f"id: {result.id}")

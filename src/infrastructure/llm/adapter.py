@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import gc
 import importlib
 from typing import Any, Dict, Optional
 
@@ -64,3 +65,16 @@ class LLMAdapter:
     def meta(self) -> LLMMetadata:
         self._init_backend()
         return self._backend.meta
+
+    def close(self) -> None:
+        backend = self._backend
+        self._backend = None
+        if backend is None:
+            return
+
+        close = getattr(backend, "close", None)
+        if callable(close):
+            close()
+
+        del backend
+        gc.collect()

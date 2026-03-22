@@ -24,3 +24,6 @@ class Worker:
         self.repo.save(job)
         self.runner.run(job)
         return job
+
+    def close(self) -> None:
+        self.llm_adapter.close()
