@@ -195,3 +195,40 @@ def test_operator_docs_and_env_example_reflect_models_yaml_policy():
     assert 'canonical operator-facing source of LLM backend and generation configuration' in runtime_doc
     assert '`ACTIVE_MODEL_PROFILE` only selects the active `models.yaml` profile' in runtime_doc
     assert 'unsupported and ignored by the canonical runtime' in runtime_doc
+
+
+def test_runtime_doctor_reports_resolved_analysis_prompt(models_config_factory, runtime_env, monkeypatch):
+    prompt_path = Path('src/prompts/analysis/v2.yaml').resolve()
+    original_exists = prompt_path.exists()
+    original_contents = prompt_path.read_text(encoding='utf-8') if original_exists else None
+    prompt_path.write_text('template: test', encoding='utf-8')
+    config_path = models_config_factory(default_analysis_prompt='analysis/v2.yaml')
+    runtime_env()
+    monkeypatch.chdir(config_path.parent)
+
+    try:
+        with patch('src.app.runtime_doctor._database_status', return_value=CheckResult('database', 'ok', 'configured')),              patch('src.app.runtime_doctor._gpu_status', return_value=CheckResult('gpu', 'ok', 'cuda ok')):
+            report = collect_runtime_report(models_path=str(config_path))
+    finally:
+        if original_exists:
+            prompt_path.write_text(original_contents, encoding='utf-8')
+        else:
+            prompt_path.unlink()
+
+    model_check = next(check for check in report['checks'] if check['name'] == 'models.yaml')
+    assert model_check['status'] == 'ok'
+    assert report['models']['analysis_prompt'] == 'analysis/v2.yaml'
+
+
+def test_runtime_doctor_warns_when_analysis_prompt_file_is_missing(models_config_factory, runtime_env, monkeypatch):
+    config_path = models_config_factory(default_analysis_prompt='analysis/does-not-exist.yaml')
+    runtime_env()
+    monkeypatch.chdir(config_path.parent)
+
+    with patch('src.app.runtime_doctor._database_status', return_value=CheckResult('database', 'ok', 'configured')), \
+         patch('src.app.runtime_doctor._gpu_status', return_value=CheckResult('gpu', 'ok', 'cuda ok')):
+        report = collect_runtime_report(models_path=str(config_path))
+
+    model_check = next(check for check in report['checks'] if check['name'] == 'models.yaml')
+    assert model_check['status'] == 'warn'
+    assert "analysis prompt 'analysis/does-not-exist.yaml' not found under src/prompts/" in model_check['detail']

@@ -10,10 +10,14 @@ from src.contracts.analysis_result import AnalysisResult
 from src.core.transcription.contracts import load_transcription_segments
 
 
+def _prompt_id_from_path(prompt_path: str) -> str:
+    if prompt_path.endswith(".yaml"):
+        prompt_path = prompt_path[:-5]
+    return prompt_path.replace("/", ".")
+
+
 class AnalysisStep(Step):
     name = "analysis"
-
-    PROMPT_PATH = "analysis/v1.yaml"
 
     def __init__(self):
         self.prompt_registry = PromptRegistry()
@@ -57,8 +61,10 @@ class AnalysisStep(Step):
                 error="Empty transcription text",
             )
 
+        prompt_path = ctx.services.llm.models_config.get_default_analysis_prompt()
+        prompt_id = _prompt_id_from_path(prompt_path)
         prompt = self.prompt_registry.render(
-            self.PROMPT_PATH,
+            prompt_path,
             transcript=transcript,
         )
 
@@ -73,7 +79,7 @@ class AnalysisStep(Step):
         meta = ctx.services.llm.meta
 
         result = AnalysisResult(
-            prompt_id="analysis.v1",
+            prompt_id=prompt_id,
             generated_at=datetime.utcnow(),
             summary_raw=llm_response,
             segment_count=len(segments),
@@ -113,6 +119,7 @@ class AnalysisStep(Step):
             artifacts={
                 "analysis_path": str(output_path),
                 "prompt_id": result.prompt_id,
+                "prompt_path": prompt_path,
                 "segment_count": result.segment_count,
             },
         )

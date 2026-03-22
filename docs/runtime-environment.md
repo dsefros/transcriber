@@ -20,7 +20,8 @@ Canonical modules to use in new development:
 
 ## Operational notes
 
-- `models.yaml` is the canonical operator-facing source of LLM backend and generation configuration.
+- `models.yaml` is the canonical operator-facing source of LLM backend and generation configuration, including the global analysis prompt template selection.
+- `default_analysis_prompt` in `models.yaml` selects the `AnalysisStep` template from `src/prompts/<relative_path>` and falls back to `analysis/v1.yaml` when omitted.
 - `ACTIVE_MODEL_PROFILE` only selects the active `models.yaml` profile.
 - Legacy LLM env vars such as `TEMPERATURE`, `NUM_CTX`, `NUM_PREDICT`, `TOP_P`, and `REPEAT_PENALTY` are unsupported and ignored by the canonical runtime; move those values into `models.yaml` profile params instead.
 - Ollama runtime context configuration is sourced from `models.yaml` via `profiles.<name>.params.num_ctx`; `context_size` is not supported for Ollama profiles.

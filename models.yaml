@@ -4,6 +4,7 @@
 #
 # Структура:
 #   default_model: <ключ_профиля>          # Профиль по умолчанию (если не задан в .env)
+#   default_analysis_prompt: <путь>        # Глобальный prompt анализа в src/prompts/
 #   profiles:
 #     <ключ_профиля>:
 #       backend: ollama | llama_cpp          # Бэкенд генерации
@@ -35,6 +36,7 @@
 
 
 default_model: mistral_8b_q6kl
+default_analysis_prompt: analysis/v1.yaml
 
 profiles:
   phi3:medium-128k:

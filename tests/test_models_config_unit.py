@@ -78,3 +78,19 @@ def test_ollama_profile_reads_num_ctx_from_config(models_config_factory):
 def test_ollama_profile_rejects_legacy_context_size_param(params, match):
     with pytest.raises(ModelConfigError, match=match):
         ModelProfile("broken", {"backend": "ollama", "name": "llama3", "params": params})
+
+
+def test_models_config_uses_legacy_analysis_prompt_when_key_is_missing(models_config_factory):
+    config_path = models_config_factory()
+
+    config = load_models_config(str(config_path))
+
+    assert config.get_default_analysis_prompt() == "analysis/v1.yaml"
+
+
+def test_models_config_reads_default_analysis_prompt_when_configured(models_config_factory):
+    config_path = models_config_factory(default_analysis_prompt="analysis/v2.yaml")
+
+    config = load_models_config(str(config_path))
+
+    assert config.get_default_analysis_prompt() == "analysis/v2.yaml"
