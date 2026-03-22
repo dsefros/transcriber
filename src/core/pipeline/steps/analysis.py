@@ -7,6 +7,7 @@ from datetime import datetime
 from src.core.pipeline.steps.base import Step, StepResult
 from src.prompts.registry import PromptRegistry
 from src.contracts.analysis_result import AnalysisResult
+from src.core.transcription.contracts import load_transcription_segments
 
 
 class AnalysisStep(Step):
@@ -22,7 +23,6 @@ class AnalysisStep(Step):
         job_id = str(ctx.job_id)
         t0 = time.monotonic()
 
-        # --- 1. Get transcription artifacts ---
         transcription = ctx.artifacts.get("transcription")
         if not transcription:
             return StepResult(
@@ -37,31 +37,31 @@ class AnalysisStep(Step):
                 error="Missing segments_path in transcription artifacts",
             )
 
-        segments_path = Path(segments_path)
-        if not segments_path.exists():
+        try:
+            segments = load_transcription_segments(segments_path)
+        except FileNotFoundError as exc:
             return StepResult(
                 status="failed",
-                error=f"Segments file not found: {segments_path}",
+                error=str(exc),
+            )
+        except ValueError as exc:
+            return StepResult(
+                status="failed",
+                error=f"Invalid transcription artifact: {exc}",
             )
 
-        # --- 2. Load segments ---
-        with open(segments_path, "r", encoding="utf-8") as f:
-            segments = json.load(f)
-
-        transcript = "\n".join(seg.get("text", "") for seg in segments).strip()
+        transcript = "\n".join(segment["text"] for segment in segments).strip()
         if not transcript:
             return StepResult(
                 status="failed",
                 error="Empty transcription text",
             )
 
-        # --- 3. Render prompt ---
         prompt = self.prompt_registry.render(
             self.PROMPT_PATH,
             transcript=transcript,
         )
 
-        # --- 4. LLM inference (КЛЮЧЕВОЕ МЕСТО) ---
         try:
             llm_response = ctx.services.llm.generate(prompt)
         except Exception as e:
@@ -72,7 +72,6 @@ class AnalysisStep(Step):
 
         meta = ctx.services.llm.meta
 
-        # --- 5. Build result ---
         result = AnalysisResult(
             prompt_id="analysis.v1",
             generated_at=datetime.utcnow(),
@@ -82,9 +81,8 @@ class AnalysisStep(Step):
             model_profile=meta["profile"],
         )
 
-        # --- 6. Save result ---
-        output_path = segments_path.with_name(
-            segments_path.stem.replace("_segments", "_analysis") + ".json"
+        output_path = Path(segments_path).with_name(
+            Path(segments_path).stem.replace("_segments", "_analysis") + ".json"
         )
 
         with open(output_path, "w", encoding="utf-8") as f:

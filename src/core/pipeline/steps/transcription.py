@@ -1,7 +1,8 @@
+import logging
+
 from src.core.pipeline.steps.base import Step, StepResult
 from src.core.pipeline.context import PipelineContext
-import json
-from pathlib import Path
+from src.core.transcription.contracts import write_transcription_segments
 
 
 class TranscriptionStep(Step):
@@ -10,10 +11,14 @@ class TranscriptionStep(Step):
     Шаг пайплайна: транскрипция аудио.
 
     Core:
-    - не знает, legacy это или нет
+    - не привязан к legacy naming
     - не знает, WhisperX или сервис
     - работает ТОЛЬКО через TranscriptionPort
+    - пишет каноничный artifact ``output/<job_id>_segments.json``
     """
+
+    def __init__(self):
+        self.logger = logging.getLogger("transcription")
 
     def run(self, ctx: PipelineContext) -> StepResult:
         if ctx.source_type != "audio":
@@ -22,30 +27,28 @@ class TranscriptionStep(Step):
                 error=f"TranscriptionStep supports only audio source, got: {ctx.source_type}",
             )
 
-        # 🔑 Вызов через порт
-        segments = ctx.services.transcription.transcribe(
-            str(ctx.source_path)
-        )
+        segments = ctx.services.transcription.transcribe(str(ctx.source_path))
 
-        if not segments:
+        try:
+            artifacts = write_transcription_segments(segments=segments, job_id=ctx.job_id)
+        except ValueError as exc:
             return StepResult(
                 status="failed",
-                error="Empty transcription result",
+                error=f"Invalid transcription artifact: {exc}",
             )
 
-        # 📦 Сохраняем сегменты в файл (канонично для pipeline)
-        output_dir = Path("output")
-        output_dir.mkdir(exist_ok=True)
+        if artifacts.get("contract_warnings"):
+            self.logger.warning(
+                "transcription_artifact_normalized",
+                extra={
+                    "extra": {
+                        "event": "transcription_artifact_normalized",
+                        "job_id": str(ctx.job_id),
+                        "segments_path": artifacts["segments_path"],
+                        "warning_count": len(artifacts["contract_warnings"]),
+                        "warnings": artifacts["contract_warnings"],
+                    }
+                },
+            )
 
-        segments_path = output_dir / f"{ctx.job_id}_segments.json"
-
-        with open(segments_path, "w", encoding="utf-8") as f:
-            json.dump(segments, f, ensure_ascii=False, indent=2)
-
-        return StepResult(
-            status="completed",
-            artifacts={
-                "segments_path": str(segments_path),
-                "segment_count": len(segments),
-            },
-        )
+        return StepResult(status="completed", artifacts=artifacts)

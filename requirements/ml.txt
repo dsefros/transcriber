@@ -1,0 +1,13 @@
+--extra-index-url https://download.pytorch.org/whl/cu121
+
+# Supported GPU baseline: CUDA 12.1 userspace wheels.
+torch==2.3.0+cu121
+torchaudio==2.3.0+cu121
+whisperx==3.3.1
+pyannote.audio==3.4.0
+openai-whisper>=20231117
+pydub>=0.25,<1.0
+transformers>=4.0,<5.0
+huggingface-hub>=0.20,<1.0
+numpy>=1.24,<2.0
+tqdm>=4.0,<5.0
