@@ -1,9 +1,15 @@
+from __future__ import annotations
+
+import gc
+import importlib
 from typing import Any, Dict, Optional
 
 from src.config.models import get_active_model_profile, load_models_config
-from src.infrastructure.llm.backends.ollama import OllamaBackend
-from src.infrastructure.llm.backends.llama_cpp import LlamaCppBackend
 from src.infrastructure.llm.types import LLMMetadata
+
+
+class LLMDependencyError(RuntimeError):
+    """Raised when the selected LLM backend dependencies are unavailable."""
 
 
 class LLMAdapter:
@@ -22,36 +28,53 @@ class LLMAdapter:
 
         self.models_config = load_models_config(models_config_path)
         self.profile = get_active_model_profile(self.models_config)
+        self._backend: Optional[Any] = None
 
-        self._backend: Optional[Any] = None  # lazy-loaded
+    def _load_backend_class(self):
+        backend_type = self.profile.backend
+        try:
+            if backend_type == "ollama":
+                module = importlib.import_module("src.infrastructure.llm.backends.ollama")
+                return module.OllamaBackend
+            if backend_type == "llama_cpp":
+                module = importlib.import_module("src.infrastructure.llm.backends.llama_cpp")
+                return module.LlamaCppBackend
+        except ModuleNotFoundError as exc:
+            package_name = exc.name or backend_type
+            raise LLMDependencyError(
+                f"LLM backend '{backend_type}' requires missing dependency '{package_name}'. "
+                "Install the runtime dependencies with: pip install -r requirements.txt"
+            ) from exc
+
+        raise ValueError(f"Unsupported backend: {backend_type}")
 
     def _init_backend(self):
         if self._backend is not None:
             return
 
-        backend_type = self.profile.backend
+        backend_class = self._load_backend_class()
         backend_config = self.profile.to_backend_config()
-
-        if backend_type == "ollama":
-            self._backend = OllamaBackend(backend_config)
-        elif backend_type == "llama_cpp":
-            self._backend = LlamaCppBackend(backend_config)
-        else:
-            raise ValueError(f"Unsupported backend: {backend_type}")
+        self._backend = backend_class(backend_config)
 
     def generate(self, prompt: str) -> str:
-        """
-        Run inference via selected backend.
-        """
         self._init_backend()
-
         params: Dict[str, Any] = self.profile.params
         return self._backend.generate(prompt, params)
 
     @property
     def meta(self) -> LLMMetadata:
-        """
-        Unified backend metadata.
-        """
         self._init_backend()
         return self._backend.meta
+
+    def close(self) -> None:
+        backend = self._backend
+        self._backend = None
+        if backend is None:
+            return
+
+        close = getattr(backend, "close", None)
+        if callable(close):
+            close()
+
+        del backend
+        gc.collect()

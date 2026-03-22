@@ -1,17 +1,13 @@
-"""Legacy-only adapter alias kept for older/manual import paths.
+"""Compatibility facade for legacy/manual import paths.
 
-The active runtime should use
-:class:`src.infrastructure.transcription.whisperx_adapter.WhisperXTranscriptionAdapter`
-directly. This module exists only as a quarantine shim so legacy callers keep
-resolving to the canonical implementation without any adapter-specific logic
-living here.
+The active runtime uses ``src.infrastructure.transcription.whisperx_adapter``
+directly and must not import the quarantined legacy tree. This module remains as a tiny
+quarantine shim so migration-era callers can resolve the old adapter symbol
+without keeping any duplicate runtime logic here.
 """
 
-from src.infrastructure.transcription.whisperx_adapter import (
-    WhisperXTranscriptionAdapter,
-)
+from src.infrastructure.transcription.whisperx_adapter import WhisperXTranscriptionAdapter
 
-# Backward-compatible name retained for migration-era imports.
 LegacyTranscriptionAdapter = WhisperXTranscriptionAdapter
 
-__all__ = ["LegacyTranscriptionAdapter", "WhisperXTranscriptionAdapter"]
+__all__ = ["LegacyTranscriptionAdapter"]
