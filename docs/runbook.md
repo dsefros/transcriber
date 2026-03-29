@@ -36,7 +36,7 @@ cd /opt/transcriber
 ./run_job.sh /data/input/<file>.json
 ```
 
-The script validates fresh artifact creation and prints exact output artifact path.
+The script validates fresh artifact creation, maps host artifact path to /app/output inside the container for schema validation, and prints the exact host output artifact path.
 
 ## Roll back
 ```bash
