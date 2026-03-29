@@ -1,28 +1,22 @@
 # Developer workflow
 
-## Local setup
-1. `cp models.yaml.example models.yaml`
-2. Install deps: `pip install -r requirements/runtime.txt -r requirements/dev.txt`
-3. Export DB env for runtime checks: `export DATABASE_URL=postgresql://...`
+## Local validation
+- `scripts/checks/pre_merge_checklist.sh`
+- `scripts/checks/local_build_smoke.sh`
 
-## Validation modes
-- Full pre-merge checklist:
-  - `scripts/checks/pre_merge_checklist.sh`
-- Local working-tree image smoke only:
-  - `scripts/checks/local_build_smoke.sh`
-- Local build/redeploy helper:
-  - `scripts/dev/redeploy_dev_local.sh`
-- Redeploy from published GHCR dev artifact:
-  - `export GHCR_IMAGE=ghcr.io/<owner>/<repo>`
-  - `scripts/dev/redeploy_dev_from_ghcr.sh`
+## Deploy-bundle rehearsal from repo
+Repo wrappers still exist under `scripts/prod/*`, but the primary runtime contract is now in `deploy/*`.
 
-Optional deep runtime execution (requires live DB + model backend):
-- `ENABLE_FULL_JOB_SMOKE=1 scripts/dev/redeploy_dev_local.sh`
-- `ENABLE_FULL_JOB_SMOKE=1 scripts/dev/redeploy_dev_from_ghcr.sh`
-
-## Production flow rehearsal
-On a Docker-capable environment with GHCR access, use:
+To rehearse bundle behavior locally without server git clone assumptions:
 ```bash
-TAG_A=prod-<old> TAG_B=prod-<new> scripts/checks/prod_operational_proof.sh
+export TRANSCRIBER_HOME=/workspace/transcriber/deploy
+cp deploy/prod.env.example deploy/prod.env
+# edit deploy/prod.env + provide deploy/models.yaml
+./deploy/install.sh prod-<sha>
+./deploy/run_job.sh /data/input/segments.sample.json
+./deploy/rollback.sh
 ```
-This rehearses deploy/deploy/validate/run/rollback using the same operational scripts as production.
+
+## GHCR dev artifact checks
+- `scripts/dev/redeploy_dev_from_ghcr.sh`
+- `scripts/dev/redeploy_dev_local.sh`

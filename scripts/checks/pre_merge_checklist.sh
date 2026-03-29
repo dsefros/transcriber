@@ -12,6 +12,9 @@ pytest
 echo "[checklist] 2) local docker build smoke"
 "$ROOT_DIR/scripts/checks/local_build_smoke.sh"
 
+echo "[checklist] 2a) deploy-bundle script syntax"
+bash -n deploy/install.sh deploy/run_job.sh deploy/rollback.sh deploy/validate.sh
+
 echo "[checklist] 3) runtime diagnostics (host python)"
 python -m src.app.runtime_doctor --json > /tmp/runtime_report.json
 

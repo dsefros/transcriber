@@ -1,32 +1,22 @@
 # Runtime contract
 
-## Detected architecture
-This repository is a **job-style CLI pipeline**, not a long-running HTTP API.
+## Architecture
+This repository is a **CLI/job pipeline**, not an HTTP service.
+No `/health` or `/ready` endpoints are part of runtime design.
 
-Canonical execution path:
-`python -m src.app.cli <source>` → `Worker` → `JobRunner` → pipeline steps.
+## Production model
+- Server has a fixed bundle directory (default `/opt/transcriber`).
+- Server does not clone repo, does not build images, and does not run pip/venv setup.
+- Images are built in GitHub Actions and pulled from GHCR by exact tag.
+- Resident dependency: Postgres.
+- Runtime jobs execute as one-shot containers via `run_job.sh`.
 
-No HTTP server and no `/health` or `/ready` endpoints exist.
+## Deployment contract
+- Install/update command: `install.sh <tag>`
+- Run job command: `run_job.sh <container-source-path>`
+- Rollback command: `rollback.sh`
+- Runtime validation command: `validate.sh` (with optional sample run)
 
-## Production execution model (chosen)
-This PR uses a **deployed image + resident dependency stack** model:
-
-- Resident in production:
-  - PostgreSQL (docker compose service `postgres`)
-  - host-mounted runtime directories (`runtime/input`, `runtime/output`, `runtime/logs`, `runtime/postgres`)
-  - operator-provided runtime config (`models.yaml` + `deployment/prod.env`)
-- Job runtime image is not permanently running; jobs are executed on demand as one-shot containers.
-- Deployment means switching the exact GHCR image tag used by compose (`IMAGE_TAG`) and validating runtime contract.
-- Rollback means switching back to the previous exact tag with symmetric state updates and running the same validation path.
-
-## Operational validation contract
-Because this is job-oriented, validation is command-based:
-
-1. Image starts canonical CLI (`--help`).
-2. Runtime doctor executes in the deployed image (`python -m src.app.runtime_doctor --json`).
-3. Optional representative sample production job via `scripts/prod/run_prod_job.sh`.
-4. `run_prod_job.sh` enforces fresh-artifact validation (new file diff or newer-than-run marker) and validates required output keys.
-
-## What is manual by design
-- GitHub Actions publishes image tags and provides deployment handoff metadata.
-- Production host execution (`deploy_prod.sh` / `rollback_prod.sh`) remains manual terminal execution because host credentials/network/secrets are intentionally externalized.
+## Validation guarantees
+- `validate.sh` checks CLI/runtime doctor in deployed image.
+- `run_job.sh` enforces fresh artifact validation (new artifact diff or marker-based freshness) and validates artifact schema keys.

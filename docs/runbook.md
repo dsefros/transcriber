@@ -1,55 +1,56 @@
-# Operations runbook
+# Operations runbook (server-bundle model)
 
-## 1) One-time production host bootstrap
+This runtime is deployed from a **small server bundle**, not from git checkout.
+Images are built in GitHub Actions and pushed to GHCR.
+
+## Server runtime bundle files
+Copy these files to `/opt/transcriber` on server:
+
+- `docker-compose.yml`
+- `prod.env.example` (rename to `prod.env`)
+- `install.sh`
+- `run_job.sh`
+- `rollback.sh`
+- `validate.sh`
+- `samples/segments.sample.json`
+
+## One-time manual preparation
 ```bash
-cp deployment/prod.env.example deployment/prod.env
-# edit deployment/prod.env and set:
-# - IMAGE_REPOSITORY / IMAGE_NAME
-# - DATABASE_URL / POSTGRES_PASSWORD
-# - models.yaml path and runtime mount paths
-mkdir -p runtime/input runtime/output runtime/logs runtime/postgres
-cp samples/segments.sample.json runtime/input/segments.sample.json
+cd /opt/transcriber
+cp prod.env.example prod.env
+# edit prod.env (IMAGE_REPOSITORY, IMAGE_NAME, DB creds, DATABASE_URL, etc.)
+# place production models.yaml at /opt/transcriber/models.yaml
+mkdir -p /opt/transcriber/runtime/input /opt/transcriber/runtime/output /opt/transcriber/runtime/logs /opt/transcriber/runtime/postgres
+cp /opt/transcriber/samples/segments.sample.json /opt/transcriber/runtime/input/segments.sample.json
 ```
 
-## 2) Deploy exact production tag
+## Install/update one version
 ```bash
-export ENV_FILE=deployment/prod.env
-export IMAGE_TAG_OVERRIDE=prod-<shortsha>
-scripts/prod/deploy_prod.sh
+cd /opt/transcriber
+./install.sh prod-<sha>
 ```
 
-Deploy evidence printed by script:
-- env/compose path used
-- current tag and target tag
-- updated state files (`deployment/state/current_prod_tag`, `deployment/state/previous_prod_tag`)
-
-## 3) Validate deployed runtime and run a production job
+## Run one job
 ```bash
-scripts/prod/validate_prod_runtime.sh --env-file deployment/prod.env --run-job-validation
-scripts/prod/run_prod_job.sh --env-file deployment/prod.env --source /data/input/<segments>.json
+cd /opt/transcriber
+./run_job.sh /data/input/<file>.json
 ```
 
-`run_prod_job.sh` validates **fresh artifact creation** per run using before/after snapshot + run marker, then validates required output keys.
+The script validates fresh artifact creation and prints exact output artifact path.
 
-## 4) Rollback
+## Roll back
 ```bash
-export ENV_FILE=deployment/prod.env
-scripts/prod/rollback_prod.sh
+cd /opt/transcriber
+./rollback.sh
 ```
 
-Rollback evidence printed by script:
-- rollback target tag
-- updated current/previous tag state after rollback
-- runtime validation result
-
-## 5) Full deterministic operational proof (A → B → validate/run → rollback)
+## Optional deeper validation
 ```bash
-export ENV_FILE=deployment/prod.env
-export TAG_A=prod-<old>
-export TAG_B=prod-<new>
-scripts/checks/prod_operational_proof.sh
+cd /opt/transcriber
+RUN_SAMPLE_JOB=1 ./validate.sh
 ```
 
-## Scope boundaries
-- CI publishes and produces deterministic deploy handoff artifacts.
-- Actual production host deployment execution is terminal-driven/manual by design (host credentials/network/secrets are intentionally outside repository scope).
+## What is intentionally manual
+- Copying the deploy bundle to server.
+- Setting `prod.env` values and `models.yaml`.
+- Running install/update/rollback commands on the server host.
