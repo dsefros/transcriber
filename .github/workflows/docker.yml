@@ -1,0 +1,116 @@
+name: docker-ci-cd
+
+on:
+  push:
+    branches:
+      - main
+      - prod
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install validation dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements/runtime.txt -r requirements/dev.txt
+
+      - name: Run tests
+        run: pytest
+
+      - name: Build local image for contract validation
+        run: docker build -t transcriber:ci-validate .
+
+      - name: Validate CLI entrypoint contract
+        run: docker run --rm transcriber:ci-validate --help
+
+  publish:
+    runs-on: ubuntu-latest
+    needs: validate
+    outputs:
+      latest_tag: ${{ steps.vars.outputs.latest_tag }}
+      sha_tag: ${{ steps.vars.outputs.sha_tag }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Compute tags
+        id: vars
+        run: |
+          SHORT_SHA="${GITHUB_SHA::7}"
+          if [[ "${GITHUB_REF_NAME}" == "prod" ]]; then
+            echo "latest_tag=prod-latest" >> "$GITHUB_OUTPUT"
+            echo "sha_tag=prod-${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+          else
+            echo "latest_tag=dev-latest" >> "$GITHUB_OUTPUT"
+            echo "sha_tag=dev-${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=raw,value=${{ steps.vars.outputs.latest_tag }}
+            type=raw,value=${{ steps.vars.outputs.sha_tag }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+  deploy_handoff_prod:
+    if: github.ref_name == 'prod'
+    runs-on: ubuntu-latest
+    needs: publish
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Create deploy handoff bundle
+        run: |
+          mkdir -p deployment/handoff
+          echo "IMAGE_TAG_OVERRIDE=${{ needs.publish.outputs.sha_tag }}" > deployment/handoff/deploy.env
+          cat > deployment/handoff/README.txt <<'BUNDLE'
+          Production image has been published.
+
+          Next deterministic deploy command on target host:
+            export ENV_FILE=deployment/prod.env
+            export IMAGE_TAG_OVERRIDE=<published-prod-tag>
+            scripts/prod/deploy_prod.sh
+
+          Optional deeper validation:
+            scripts/prod/validate_prod_runtime.sh --env-file deployment/prod.env --run-job-validation
+          BUNDLE
+
+      - name: Upload deploy handoff bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: prod-deploy-handoff
+          path: deployment/handoff

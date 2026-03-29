@@ -1,0 +1,38 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: ${COMPOSE_PROJECT_NAME:-transcriber}_postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-transcriber}
+      POSTGRES_USER: ${POSTGRES_USER:-transcriber}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in deployment/prod.env}
+    volumes:
+      - ${PGDATA_DIR:-./runtime/postgres}:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-transcriber} -d ${POSTGRES_DB:-transcriber}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  transcriber_job:
+    image: ${IMAGE_REPOSITORY:?Set IMAGE_REPOSITORY}/${IMAGE_NAME:?Set IMAGE_NAME}:${IMAGE_TAG:-prod-latest}
+    container_name: ${COMPOSE_PROJECT_NAME:-transcriber}_job
+    profiles: ["job"]
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in deployment/prod.env}
+      ACTIVE_MODEL_PROFILE: ${ACTIVE_MODEL_PROFILE:-}
+      HF_TOKEN: ${HF_TOKEN:-}
+      OLLAMA_HOST: ${OLLAMA_HOST:-}
+    volumes:
+      - ${MODELS_CONFIG_PATH:-./models.yaml}:/app/models.yaml:ro
+      - ${INPUT_DIR:-./runtime/input}:/data/input:ro
+      - ${OUTPUT_DIR:-./runtime/output}:/app/output
+      - ${LOG_DIR:-./runtime/logs}:/app/logs
+    command: ["${JOB_SOURCE_PATH:-/data/input/segments.sample.json}"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
