@@ -18,5 +18,6 @@ No `/health` or `/ready` endpoints are part of runtime design.
 - Runtime validation command: `validate.sh` (with optional sample run)
 
 ## Validation guarantees
-- `validate.sh` checks CLI/runtime doctor in deployed image.
+- `validate.sh` checks CLI/runtime doctor in deployed image, including a DB connection probe.
+- Default bundle validation targets the lightweight server image contract; missing local heavy audio/ML packages are reported as optional warnings, not bundle-blocking failures.
 - `run_job.sh` enforces fresh artifact validation (new artifact diff or marker-based freshness) and validates artifact schema keys.

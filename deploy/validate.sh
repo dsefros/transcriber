@@ -9,7 +9,7 @@ RUN_SAMPLE="${RUN_SAMPLE_JOB:-0}"
 echo "[validate] base_dir=$BASE_DIR"
 echo "[validate] runtime doctor"
 docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" run --rm --no-deps \
-  --entrypoint python transcriber_job -m src.app.runtime_doctor --json > "$BASE_DIR/state/runtime_doctor.json"
+  --entrypoint python transcriber_job -m src.app.runtime_doctor --json --check-db-connection > "$BASE_DIR/state/runtime_doctor.json"
 
 echo "[validate] CLI contract"
 docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" run --rm --no-deps transcriber_job --help > "$BASE_DIR/state/cli_help.txt"

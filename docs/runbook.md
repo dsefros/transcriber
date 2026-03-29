@@ -50,6 +50,8 @@ cd /opt/transcriber
 RUN_SAMPLE_JOB=1 ./validate.sh
 ```
 
+The default bundle validation is for the lightweight image contract (analysis/job flow + DB/runtime basics). Heavy local audio ML stack readiness is external and optional.
+
 ## What is intentionally manual
 - Copying the deploy bundle to server.
 - Setting `prod.env` values and `models.yaml`.

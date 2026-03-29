@@ -33,16 +33,19 @@ RUNTIME_PACKAGES = {
     "SQLAlchemy": True,
     "python-dotenv": True,
     "psutil": True,
+    "psycopg2-binary": True,
     "ollama": False,
     "llama-cpp-python": False,
 }
 
 ML_PACKAGES = {
-    "torch": True,
-    "torchaudio": True,
-    "whisperx": True,
-    "pyannote.audio": True,
-    "pydub": True,
+    # Optional for the default lightweight server image.
+    # Required only for full local audio/transcription execution paths.
+    "torch": False,
+    "torchaudio": False,
+    "whisperx": False,
+    "pyannote.audio": False,
+    "pydub": False,
     "transformers": False,
     "huggingface-hub": False,
 }
@@ -207,7 +210,7 @@ def _collect_package_checks(active_backend: str | None) -> list[CheckResult]:
 def _gpu_status() -> CheckResult:
     torch_version = _package_version("torch")
     if torch_version is None:
-        return CheckResult("gpu", "fail", "torch is not installed, so the supported GPU runtime cannot be validated.")
+        return CheckResult("gpu", "warn", "torch is not installed; GPU/audio transcription stack validation is skipped for lightweight runtime images.")
 
     import importlib
 
@@ -216,7 +219,7 @@ def _gpu_status() -> CheckResult:
     except Exception as exc:
         return CheckResult(
             "gpu",
-            "fail",
+            "warn",
             f"torch is installed but could not be imported cleanly: {exc}",
         )
 

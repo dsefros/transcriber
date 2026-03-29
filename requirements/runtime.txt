@@ -7,3 +7,6 @@ ollama>=0.1.0,<1.0
 
 # Optional local LLM backend for profiles using backend=llama_cpp.
 llama-cpp-python>=0.2.0,<1.0
+
+# PostgreSQL DBAPI driver used by SQLAlchemy postgresql:// URLs in server runtime.
+psycopg2-binary>=2.9,<3.0
